@@ -108,8 +108,8 @@ export default function Home() {
             color: "#4b5563",
           }}
         >
-          Baremia analiza los listados oficiales y estima tu posición y tus
-          posibilidades dentro del proceso selectivo.
+          Baremia analiza miles de datos oficiales y estima tu posición y tus
+          posibilidades dentro del proceso selectivo para ayudarte a tomar decisiones.
         </p>
 
         <div
