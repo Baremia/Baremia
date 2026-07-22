@@ -37,12 +37,13 @@ export default function Home() {
   <Image
     src="/logo.svg"
     alt="Baremia"
-    width={190}
-    height={51}
+    width={228}
+    height={54}
     priority
     style={{
-      width: "190px",
+      width: "228px",
       height: "auto",
+      display: "block",
     }}
   />
 </a>
