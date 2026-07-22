@@ -1,3 +1,4 @@
+import Image from "next/image";
 export default function Home() {
   return (
     <main
@@ -25,7 +26,26 @@ export default function Home() {
             letterSpacing: "-0.8px",
           }}
         >
-          Baremia
+          <a
+  href="/"
+  style={{
+    display: "flex",
+    alignItems: "center",
+    textDecoration: "none",
+  }}
+>
+  <Image
+    src="/logo.svg"
+    alt="Baremia"
+    width={190}
+    height={51}
+    priority
+    style={{
+      width: "190px",
+      height: "auto",
+    }}
+  />
+</a>
         </strong>
 
         <nav
