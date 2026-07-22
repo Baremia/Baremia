@@ -1,18 +1,17 @@
-import type { Metadata } from "next";
+import { Geist } from "next/font/google";
 
-export const metadata: Metadata = {
-  title: "Baremia",
-  description: "Estimaciones inteligentes para opositores",
-};
+const geist = Geist({
+  subsets: ["latin"],
+});
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body className={geist.className}>{children}</body>
     </html>
   );
 }
