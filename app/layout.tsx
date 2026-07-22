@@ -4,12 +4,15 @@ const geist = Geist({
   subsets: ["latin"],
 });
 export const metadata = {
+ export const metadata = {
   title: "Baremia",
   description:
     "Analizamos miles de datos oficiales para estimar tu posición y ayudarte a tomar mejores decisiones.",
   icons: {
-    icon: [
-      {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+};
         url: "/favicon.ico",
       },
       {
