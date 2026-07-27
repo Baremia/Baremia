@@ -582,23 +582,24 @@ export default function EnfermeriaMadridPage() {
               </div>
 
               <button
-                type="button"
-                style={{
-                  width: "100%",
-                  minHeight: "56px",
-                  marginTop: "24px",
-                  padding: "0 22px",
-                  color: "#ffffff",
-                  background: "#2563eb",
-                  border: "none",
-                  borderRadius: "12px",
-                  fontSize: "16px",
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                Desbloquear mi análisis
-              </button>
+  type="button"
+  onClick={() => setStatus("result")}
+  style={{
+    width: "100%",
+    minHeight: "56px",
+    marginTop: "24px",
+    padding: "0 22px",
+    color: "#ffffff",
+    background: "#2563eb",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "16px",
+    fontWeight: 800,
+    cursor: "pointer",
+  }}
+>
+  Desbloquear mi análisis
+</button>
 
               <button
                 type="button"
