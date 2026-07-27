@@ -1,1 +1,4 @@
-Sube los archivos de iconos a /public y copia layout.tsx, page.tsx y globals.css dentro de /app. Luego haz commit y fuerza recarga con Ctrl+F5.
+Sube todos estos archivos a /public.
+Usa logo.svg en la cabecera.
+Usa favicon.ico, favicon-32.png y favicon-16.png en metadata.
+El favicon es una B limpia con fondo blanco.
