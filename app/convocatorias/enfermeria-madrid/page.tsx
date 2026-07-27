@@ -5,7 +5,7 @@ import Link from "next/link";
 import Header from "../../../components/Header";
 import Footer from "../../../components/Footer";
 
-type SearchStatus = "idle" | "searching" | "found";
+type SearchStatus = "idle" | "searching" | "found" | "checkout";
 
 export default function EnfermeriaMadridPage() {
   const [query, setQuery] = useState("");
@@ -416,7 +416,7 @@ export default function EnfermeriaMadridPage() {
 
               <button
                 type="button"
-                onClick={resetSearch}
+                onClick={() => setStatus("checkout")}
                 style={{
                   width: "100%",
                   minHeight: "50px",
@@ -445,6 +445,185 @@ export default function EnfermeriaMadridPage() {
               >
                 La coincidencia deberá verificarse antes de mostrar cualquier
                 información privada.
+              </p>
+            </div>
+          )}
+                    {status === "checkout" && (
+            <div
+              style={{
+                padding: "34px",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "20px",
+                boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  marginBottom: "22px",
+                  padding: "8px 13px",
+                  color: "#1e40af",
+                  background: "#dbeafe",
+                  borderRadius: "999px",
+                  fontSize: "14px",
+                  fontWeight: 800,
+                }}
+              >
+                Consulta preparada
+              </div>
+
+              <h2
+                style={{
+                  margin: 0,
+                  color: "#0f172a",
+                  fontSize: "32px",
+                  lineHeight: 1.2,
+                  letterSpacing: "-1px",
+                }}
+              >
+                Desbloquea tu análisis privado
+              </h2>
+
+              <p
+                style={{
+                  margin: "16px 0 0",
+                  color: "#64748b",
+                  fontSize: "17px",
+                  lineHeight: 1.7,
+                }}
+              >
+                Tu acceso quedará vinculado al registro localizado para que
+                puedas consultar futuras actualizaciones de esta convocatoria.
+              </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "16px",
+                  marginTop: "28px",
+                  padding: "22px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "14px",
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px",
+                      color: "#64748b",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Registro
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#0f172a",
+                      fontSize: "17px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {query.trim()}
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px",
+                      color: "#64748b",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Convocatoria
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#0f172a",
+                      fontSize: "17px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    OPE de Enfermería · Comunidad de Madrid
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "24px",
+                  padding: "18px",
+                  color: "#334155",
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: "12px",
+                  fontSize: "14px",
+                  lineHeight: 1.6,
+                }}
+              >
+                El pago todavía no está conectado. Esta pantalla representa el
+                paso previo al acceso privado.
+              </div>
+
+              <button
+                type="button"
+                style={{
+                  width: "100%",
+                  minHeight: "56px",
+                  marginTop: "24px",
+                  padding: "0 22px",
+                  color: "#ffffff",
+                  background: "#2563eb",
+                  border: "none",
+                  borderRadius: "12px",
+                  fontSize: "16px",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Desbloquear mi análisis
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatus("found")}
+                style={{
+                  width: "100%",
+                  minHeight: "50px",
+                  marginTop: "12px",
+                  padding: "0 22px",
+                  color: "#334155",
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "12px",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Volver a la coincidencia
+              </button>
+
+              <p
+                style={{
+                  margin: "20px 0 0",
+                  color: "#64748b",
+                  fontSize: "13px",
+                  lineHeight: 1.6,
+                  textAlign: "center",
+                }}
+              >
+                No se mostrará información de otros participantes.
               </p>
             </div>
           )}
