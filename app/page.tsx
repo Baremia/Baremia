@@ -5,15 +5,15 @@ export default function Home() {
     <main>
       <header className="site-header">
         <a href="/" className="brand" aria-label="Baremia, inicio">
-          <Image
-            src="/logo.svg"
-            alt="Baremia"
-            width={320}
-            height={78}
-            priority
-            className="brand-logo"
-          />
-        </a>
+  <Image
+    src="/logo.svg"
+    alt="Baremia"
+    width={320}
+    height={78}
+    priority
+    className="brand-logo"
+  />
+  </a>
 
         <nav className="main-nav" aria-label="Navegación principal">
           <a href="#como-funciona">Cómo funciona</a>
