@@ -1,4 +1,4 @@
-"use client";
+<h1>PRUEBA 123456</h1>
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
