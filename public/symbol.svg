@@ -1,12 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 240">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
 <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#1D4ED8"/></linearGradient></defs>
-<g transform="translate(18 18)">
 <path d="M42 18H108c42 0 68 22 68 56 0 20-10 36-28 46 24 10 38 29 38 54 0 39-30 66-75 66H42V18Z" fill="url(#g)"/>
 <path d="M80 50h27c23 0 37 11 37 28s-14 28-37 28H80V50Z" fill="#fff"/>
 <path d="M80 135h31c25 0 40 12 40 31s-15 31-40 31H80V135Z" fill="#fff"/>
 <rect x="57" y="71" width="33" height="10" rx="5" fill="#DBEAFE"/>
 <rect x="57" y="111" width="27" height="10" rx="5" fill="#BFDBFE"/>
 <rect x="57" y="151" width="21" height="10" rx="5" fill="#93C5FD"/>
-</g>
-<text x="235" y="163" font-family="Arial,Helvetica,sans-serif" font-size="138" font-weight="800" letter-spacing="-6" fill="#FFFFFF">Baremia</text>
 </svg>
