@@ -1,18 +1,18 @@
+import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import "./globals.css";
 
 const geist = Geist({
   subsets: ["latin"],
 });
-export const metadata = {
- export const metadata = {
+
+export const metadata: Metadata = {
   title: "Baremia",
   description:
     "Analizamos miles de datos oficiales para estimar tu posición y ayudarte a tomar mejores decisiones.",
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
-  },
-};
+    icon: [
+      {
         url: "/favicon.ico",
       },
       {
@@ -29,6 +29,7 @@ export const metadata = {
     apple: "/apple-touch-icon.png",
   },
 };
+
 export default function RootLayout({
   children,
 }: Readonly<{
