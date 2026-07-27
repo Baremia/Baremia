@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: "Baremia",
   description:
     "Analizamos miles de datos oficiales para estimar tu posición y ayudarte a tomar mejores decisiones.",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: [
       {
@@ -26,6 +27,7 @@ export const metadata: Metadata = {
         type: "image/png",
       },
     ],
+    shortcut: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
 };
