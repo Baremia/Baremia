@@ -1,1 +1,0 @@
-Sube los archivos de iconos a /public y copia layout.tsx, page.tsx y globals.css dentro de /app. Luego haz commit y fuerza recarga con Ctrl+F5.
