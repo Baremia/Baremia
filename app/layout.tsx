@@ -9,7 +9,7 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "Baremia",
   description:
-    "Analizamos miles de datos oficiales para estimar tu posición y ayudarte a tomar mejores decisiones.",
+    "Analizamos listados oficiales para estimar tu posición en procesos selectivos.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
