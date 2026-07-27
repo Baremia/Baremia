@@ -1,66 +1,207 @@
+import Link from "next/link";
+import Header from "../../components/Header";
+import Footer from "../../components/Footer";
+
 export default function ConvocatoriasPage() {
   return (
-    <main
-      style={{
-        maxWidth: "1100px",
-        margin: "0 auto",
-        padding: "80px 24px",
-      }}
-    >
-      <h1
+    <>
+      <Header />
+
+      <main
         style={{
-          fontSize: "48px",
-          marginBottom: "16px",
+          minHeight: "70vh",
+          background: "#f7f8fc",
+          padding: "80px 24px 100px",
         }}
       >
-        Convocatorias disponibles
-      </h1>
-
-      <p
-        style={{
-          fontSize: "20px",
-          color: "#6B7280",
-          marginBottom: "50px",
-        }}
-      >
-        Selecciona una convocatoria para estimar tu posición.
-      </p>
-
-      <div
-        style={{
-          border: "1px solid #E5E7EB",
-          borderRadius: "18px",
-          padding: "30px",
-          background: "white",
-        }}
-      >
-        <h2>Enfermería · Comunidad de Madrid</h2>
-
-        <p
+        <section
           style={{
-            color: "#6B7280",
-            marginTop: "10px",
-            marginBottom: "24px",
+            width: "100%",
+            maxWidth: "1100px",
+            margin: "0 auto",
           }}
         >
-          Estimación basada en méritos oficiales y datos históricos.
-        </p>
+          <div
+            style={{
+              maxWidth: "720px",
+              marginBottom: "48px",
+            }}
+          >
+            <p
+              style={{
+                marginBottom: "14px",
+                color: "#2563eb",
+                fontSize: "14px",
+                fontWeight: 700,
+              }}
+            >
+              CONVOCATORIAS
+            </p>
 
-        <a
-          href="/convocatorias/enfermeria-madrid"
-          style={{
-            display: "inline-block",
-            background: "#2563EB",
-            color: "white",
-            padding: "14px 22px",
-            borderRadius: "10px",
-            textDecoration: "none",
-            fontWeight: 600,
-          }}
-        >
-          Comenzar estimación
-        </a>
-      </div>
-    </main>
+            <h1
+              style={{
+                margin: 0,
+                color: "#0f172a",
+                fontSize: "clamp(40px, 6vw, 64px)",
+                lineHeight: 1.05,
+                letterSpacing: "-2px",
+              }}
+            >
+              Consulta tu posición en los listados oficiales
+            </h1>
+
+            <p
+              style={{
+                marginTop: "22px",
+                color: "#64748b",
+                fontSize: "19px",
+                lineHeight: 1.7,
+              }}
+            >
+              Selecciona el proceso en el que participas. Solo necesitarás tu
+              nombre o identificación para localizarte en los documentos
+              oficiales.
+            </p>
+          </div>
+
+          <article
+            style={{
+              display: "grid",
+              gap: "28px",
+              padding: "34px",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "20px",
+              boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "22px",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    padding: "7px 12px",
+                    color: "#166534",
+                    background: "#dcfce7",
+                    borderRadius: "999px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Disponible
+                </span>
+
+                <span
+                  style={{
+                    color: "#64748b",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                  }}
+                >
+                  Datos oficiales
+                </span>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  color: "#2563eb",
+                  fontSize: "15px",
+                  fontWeight: 700,
+                }}
+              >
+                Comunidad de Madrid
+              </p>
+
+              <h2
+                style={{
+                  margin: "8px 0 14px",
+                  color: "#0f172a",
+                  fontSize: "32px",
+                  letterSpacing: "-1px",
+                }}
+              >
+                OPE de Enfermería
+              </h2>
+
+              <p
+                style={{
+                  maxWidth: "720px",
+                  margin: 0,
+                  color: "#64748b",
+                  fontSize: "17px",
+                  lineHeight: 1.7,
+                }}
+              >
+                Localízate en los listados publicados y accede a una estimación
+                privada de tu posición dentro del proceso selectivo.
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "20px",
+                paddingTop: "24px",
+                borderTop: "1px solid #e2e8f0",
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#0f172a",
+                    fontWeight: 700,
+                  }}
+                >
+                  Consulta privada
+                </p>
+
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    color: "#64748b",
+                    fontSize: "14px",
+                  }}
+                >
+                  No mostraremos datos completos antes de verificar el acceso.
+                </p>
+              </div>
+
+              <Link
+                href="/convocatorias/enfermeria-madrid"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: "52px",
+                  padding: "0 24px",
+                  color: "#ffffff",
+                  background: "#2563eb",
+                  borderRadius: "12px",
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                Buscarme en los listados
+              </Link>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <Footer />
+    </>
   );
 }
