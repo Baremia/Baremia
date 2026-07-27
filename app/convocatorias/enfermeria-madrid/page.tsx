@@ -1,12 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import Header from "../../../components/Header";
 import Footer from "../../../components/Footer";
+
+type SearchStatus = "idle" | "searching" | "found";
 
 export default function EnfermeriaMadridPage() {
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<SearchStatus>("idle");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -15,12 +19,22 @@ export default function EnfermeriaMadridPage() {
 
     if (cleanQuery.length < 4) {
       setMessage("Introduce al menos 4 caracteres para realizar la búsqueda.");
+      setStatus("idle");
       return;
     }
 
-    setMessage(
-      "La búsqueda todavía no está conectada a los listados oficiales. En el siguiente paso conectaremos esta pantalla con la base de datos."
-    );
+    setMessage("");
+    setStatus("searching");
+
+    window.setTimeout(() => {
+      setStatus("found");
+    }, 900);
+  }
+
+  function resetSearch() {
+    setQuery("");
+    setMessage("");
+    setStatus("idle");
   }
 
   return (
@@ -41,7 +55,7 @@ export default function EnfermeriaMadridPage() {
             margin: "0 auto",
           }}
         >
-          <a
+          <Link
             href="/convocatorias"
             style={{
               display: "inline-block",
@@ -53,7 +67,7 @@ export default function EnfermeriaMadridPage() {
             }}
           >
             ← Volver a convocatorias
-          </a>
+          </Link>
 
           <div
             style={{
@@ -81,7 +95,9 @@ export default function EnfermeriaMadridPage() {
                 letterSpacing: "-2px",
               }}
             >
-              Localízate en los listados oficiales
+              {status === "found"
+                ? "Registro localizado"
+                : "Localízate en los listados oficiales"}
             </h1>
 
             <p
@@ -92,72 +108,295 @@ export default function EnfermeriaMadridPage() {
                 lineHeight: 1.7,
               }}
             >
-              Introduce tu nombre completo o tu DNI para comprobar si apareces
-              en los documentos publicados del proceso selectivo.
+              {status === "found"
+                ? "Hemos encontrado una coincidencia compatible con los datos introducidos."
+                : "Introduce tu nombre completo o tu DNI para comprobar si apareces en los documentos publicados del proceso selectivo."}
             </p>
           </div>
 
-          <div
-            style={{
-              padding: "34px",
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "20px",
-              boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
-            }}
-          >
-            <form onSubmit={handleSubmit}>
-              <label
-                htmlFor="candidate-search"
+          {status !== "found" && (
+            <div
+              style={{
+                padding: "34px",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "20px",
+                boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+              }}
+            >
+              <form onSubmit={handleSubmit}>
+                <label
+                  htmlFor="candidate-search"
+                  style={{
+                    display: "block",
+                    marginBottom: "10px",
+                    color: "#0f172a",
+                    fontSize: "16px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Nombre completo o DNI
+                </label>
+
+                <input
+                  id="candidate-search"
+                  name="candidate-search"
+                  type="text"
+                  value={query}
+                  disabled={status === "searching"}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setMessage("");
+                  }}
+                  placeholder="Ejemplo: Rafael García López o 12345678A"
+                  autoComplete="off"
+                  style={{
+                    width: "100%",
+                    minHeight: "56px",
+                    padding: "0 16px",
+                    color: "#0f172a",
+                    background:
+                      status === "searching" ? "#f8fafc" : "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "12px",
+                    fontSize: "16px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                <p
+                  style={{
+                    margin: "10px 0 0",
+                    color: "#64748b",
+                    fontSize: "14px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Utiliza los mismos datos con los que apareces en los listados
+                  oficiales.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={status === "searching"}
+                  style={{
+                    width: "100%",
+                    minHeight: "54px",
+                    marginTop: "24px",
+                    padding: "0 22px",
+                    color: "#ffffff",
+                    background:
+                      status === "searching" ? "#64748b" : "#2563eb",
+                    border: "none",
+                    borderRadius: "12px",
+                    fontSize: "16px",
+                    fontWeight: 800,
+                    cursor:
+                      status === "searching" ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {status === "searching"
+                    ? "Buscando coincidencias..."
+                    : "Buscar en los listados"}
+                </button>
+              </form>
+
+              {status === "searching" && (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: "22px",
+                    padding: "16px",
+                    color: "#1e3a8a",
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "12px",
+                    fontSize: "15px",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Estamos comprobando los documentos asociados a esta
+                  convocatoria.
+                </div>
+              )}
+
+              {message && (
+                <div
+                  role="alert"
+                  style={{
+                    marginTop: "22px",
+                    padding: "16px",
+                    color: "#991b1b",
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: "12px",
+                    fontSize: "15px",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {message}
+                </div>
+              )}
+
+              <div
                 style={{
-                  display: "block",
-                  marginBottom: "10px",
-                  color: "#0f172a",
-                  fontSize: "16px",
-                  fontWeight: 700,
+                  marginTop: "28px",
+                  paddingTop: "24px",
+                  borderTop: "1px solid #e2e8f0",
                 }}
               >
-                Nombre completo o DNI
-              </label>
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#0f172a",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Consulta privada
+                </p>
 
-              <input
-                id="candidate-search"
-                name="candidate-search"
-                type="text"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setMessage("");
-                }}
-                placeholder="Ejemplo: Rafael García López o 12345678A"
-                autoComplete="off"
-                style={{
-                  width: "100%",
-                  minHeight: "56px",
-                  padding: "0 16px",
-                  color: "#0f172a",
-                  background: "#ffffff",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "12px",
-                  fontSize: "16px",
-                  outline: "none",
-                }}
-              />
+                <p
+                  style={{
+                    margin: "7px 0 0",
+                    color: "#64748b",
+                    fontSize: "14px",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Baremia no mostrará públicamente puntuaciones, posiciones ni
+                  datos completos de otras personas.
+                </p>
+              </div>
+            </div>
+          )}
 
-              <p
+          {status === "found" && (
+            <div
+              style={{
+                padding: "34px",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "20px",
+                boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+              }}
+            >
+              <div
                 style={{
-                  margin: "10px 0 0",
-                  color: "#64748b",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  marginBottom: "24px",
+                  padding: "8px 13px",
+                  color: "#166534",
+                  background: "#dcfce7",
+                  borderRadius: "999px",
                   fontSize: "14px",
-                  lineHeight: 1.5,
+                  fontWeight: 800,
                 }}
               >
-                Utiliza los mismos datos con los que apareces en los listados
-                oficiales.
-              </p>
+                Coincidencia encontrada
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "18px",
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px",
+                      color: "#64748b",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Candidato
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#0f172a",
+                      fontSize: "20px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Registro compatible con «{query.trim()}»
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px",
+                      color: "#64748b",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Convocatoria
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#0f172a",
+                      fontSize: "17px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    OPE de Enfermería · Comunidad de Madrid
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    style={{
+                      margin: "0 0 5px",
+                      color: "#64748b",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Estado
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "#334155",
+                      fontSize: "17px",
+                    }}
+                  >
+                    Registro localizado en los listados del proceso
+                  </p>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "28px",
+                  padding: "18px",
+                  color: "#334155",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  fontSize: "14px",
+                  lineHeight: 1.6,
+                }}
+              >
+                Esta pantalla utiliza actualmente una coincidencia simulada.
+                Todavía no está conectada a los documentos oficiales.
+              </div>
 
               <button
-                type="submit"
+                type="button"
                 style={{
                   width: "100%",
                   minHeight: "54px",
@@ -172,59 +411,43 @@ export default function EnfermeriaMadridPage() {
                   cursor: "pointer",
                 }}
               >
-                Buscar en los listados
+                Continuar con mi consulta
               </button>
-            </form>
 
-            {message && (
-              <div
-                role="status"
+              <button
+                type="button"
+                onClick={resetSearch}
                 style={{
-                  marginTop: "22px",
-                  padding: "16px",
+                  width: "100%",
+                  minHeight: "50px",
+                  marginTop: "12px",
+                  padding: "0 22px",
                   color: "#334155",
-                  background: "#eff6ff",
-                  border: "1px solid #bfdbfe",
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
                   borderRadius: "12px",
                   fontSize: "15px",
-                  lineHeight: 1.6,
-                }}
-              >
-                {message}
-              </div>
-            )}
-
-            <div
-              style={{
-                marginTop: "28px",
-                paddingTop: "24px",
-                borderTop: "1px solid #e2e8f0",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  color: "#0f172a",
-                  fontSize: "15px",
                   fontWeight: 700,
+                  cursor: "pointer",
                 }}
               >
-                Consulta privada
-              </p>
+                Buscar con otros datos
+              </button>
 
               <p
                 style={{
-                  margin: "7px 0 0",
+                  margin: "20px 0 0",
                   color: "#64748b",
-                  fontSize: "14px",
+                  fontSize: "13px",
                   lineHeight: 1.6,
+                  textAlign: "center",
                 }}
               >
-                Baremia no mostrará públicamente puntuaciones, posiciones ni
-                datos completos de otras personas.
+                La coincidencia deberá verificarse antes de mostrar cualquier
+                información privada.
               </p>
             </div>
-          </div>
+          )}
         </section>
       </main>
 
