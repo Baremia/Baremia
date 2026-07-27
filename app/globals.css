@@ -35,9 +35,10 @@ a {
 }
 
 .brand-logo {
+  display: block;
   width: 320px;
   height: auto;
-  display: block;
+  object-fit: contain;
 }
 
 .main-nav {
