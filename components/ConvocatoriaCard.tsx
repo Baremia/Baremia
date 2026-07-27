@@ -1,17 +1,21 @@
 import Link from "next/link";
 
 type ConvocatoriaCardProps = {
-  title: string;
-  location: string;
-  status: string;
   href: string;
+  title: string;
+  administration: string;
+  status: string;
+  description: string;
+  places: string;
 };
 
 export default function ConvocatoriaCard({
-  title,
-  location,
-  status,
   href,
+  title,
+  administration,
+  status,
+  description,
+  places,
 }: ConvocatoriaCardProps) {
   return (
     <article className="convocatoria-card">
@@ -20,7 +24,13 @@ export default function ConvocatoriaCard({
 
         <h3>{title}</h3>
 
-        <p>{location}</p>
+        <p>{administration}</p>
+
+        <p>{description}</p>
+
+        <p>
+          <strong>{places}</strong>
+        </p>
       </div>
 
       <Link href={href} className="button button-primary">
