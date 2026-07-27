@@ -41,7 +41,7 @@ export default function Home() {
     height={54}
     priority
     style={{
-      width: "auto",
+      width: "228px",
       height: "auto",
       display: "block",
     }}
