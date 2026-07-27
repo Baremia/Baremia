@@ -5,7 +5,12 @@ import Link from "next/link";
 import Header from "../../../components/Header";
 import Footer from "../../../components/Footer";
 
-type SearchStatus = "idle" | "searching" | "found" | "checkout";
+type SearchStatus =
+  | "idle"
+  | "searching"
+  | "found"
+  | "checkout"
+  | "result";
 
 export default function EnfermeriaMadridPage() {
   const [query, setQuery] = useState("");
@@ -596,7 +601,7 @@ export default function EnfermeriaMadridPage() {
 
               <button
                 type="button"
-                onClick={() => setStatus("found")}
+onClick={() => setStatus("result")}
                 style={{
                   width: "100%",
                   minHeight: "50px",
@@ -627,6 +632,209 @@ export default function EnfermeriaMadridPage() {
               </p>
             </div>
           )}
+       {status === "result" && (
+  <div
+    style={{
+      padding: "34px",
+      background: "#ffffff",
+      border: "1px solid #e2e8f0",
+      borderRadius: "20px",
+      boxShadow: "0 14px 40px rgba(15, 23, 42, 0.06)",
+    }}
+  >
+    <div
+      style={{
+        display: "inline-flex",
+        marginBottom: "22px",
+        padding: "8px 13px",
+        color: "#166534",
+        background: "#dcfce7",
+        borderRadius: "999px",
+        fontSize: "14px",
+        fontWeight: 800,
+      }}
+    >
+      Análisis desbloqueado
+    </div>
+
+    <h2
+      style={{
+        margin: 0,
+        color: "#0f172a",
+        fontSize: "32px",
+        lineHeight: 1.2,
+        letterSpacing: "-1px",
+      }}
+    >
+      Tu estimación de posición
+    </h2>
+
+    <p
+      style={{
+        margin: "16px 0 0",
+        color: "#64748b",
+        fontSize: "17px",
+        lineHeight: 1.7,
+      }}
+    >
+      Este resultado es una simulación visual. Todavía no está calculado a
+      partir de los listados oficiales.
+    </p>
+
+    <div
+      style={{
+        marginTop: "28px",
+        padding: "26px",
+        background: "#eff6ff",
+        border: "1px solid #bfdbfe",
+        borderRadius: "16px",
+        textAlign: "center",
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          color: "#1e3a8a",
+          fontSize: "14px",
+          fontWeight: 800,
+          textTransform: "uppercase",
+        }}
+      >
+        Posición estimada
+      </p>
+
+      <p
+        style={{
+          margin: "10px 0 0",
+          color: "#0f172a",
+          fontSize: "48px",
+          fontWeight: 900,
+          letterSpacing: "-2px",
+        }}
+      >
+        1.248
+      </p>
+
+      <p
+        style={{
+          margin: "8px 0 0",
+          color: "#475569",
+          fontSize: "15px",
+        }}
+      >
+        de aproximadamente 8.400 participantes
+      </p>
+    </div>
+
+    <div
+      style={{
+        display: "grid",
+        gap: "14px",
+        marginTop: "24px",
+      }}
+    >
+      <div
+        style={{
+          padding: "18px",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: "12px",
+        }}
+      >
+        <p
+          style={{
+            margin: "0 0 5px",
+            color: "#64748b",
+            fontSize: "13px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+          }}
+        >
+          Registro consultado
+        </p>
+
+        <p
+          style={{
+            margin: 0,
+            color: "#0f172a",
+            fontSize: "17px",
+            fontWeight: 800,
+          }}
+        >
+          {query.trim()}
+        </p>
+      </div>
+
+      <div
+        style={{
+          padding: "18px",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: "12px",
+        }}
+      >
+        <p
+          style={{
+            margin: "0 0 5px",
+            color: "#64748b",
+            fontSize: "13px",
+            fontWeight: 700,
+            textTransform: "uppercase",
+          }}
+        >
+          Convocatoria
+        </p>
+
+        <p
+          style={{
+            margin: 0,
+            color: "#0f172a",
+            fontSize: "17px",
+            fontWeight: 700,
+          }}
+        >
+          OPE de Enfermería · Comunidad de Madrid
+        </p>
+      </div>
+    </div>
+
+    <div
+      style={{
+        marginTop: "24px",
+        padding: "18px",
+        color: "#92400e",
+        background: "#fffbeb",
+        border: "1px solid #fde68a",
+        borderRadius: "12px",
+        fontSize: "14px",
+        lineHeight: 1.6,
+      }}
+    >
+      La cifra mostrada es ficticia y solo sirve para probar el recorrido de la
+      web.
+    </div>
+
+    <button
+      type="button"
+      onClick={resetSearch}
+      style={{
+        width: "100%",
+        minHeight: "52px",
+        marginTop: "24px",
+        padding: "0 22px",
+        color: "#334155",
+        background: "#ffffff",
+        border: "1px solid #cbd5e1",
+        borderRadius: "12px",
+        fontSize: "15px",
+        fontWeight: 700,
+        cursor: "pointer",
+      }}
+    >
+      Realizar otra consulta
+    </button>
+  </div>
+)}
         </section>
       </main>
 
