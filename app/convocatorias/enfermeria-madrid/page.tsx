@@ -400,24 +400,25 @@ export default function EnfermeriaMadridPage() {
                 Todavía no está conectada a los documentos oficiales.
               </div>
 
-              <button
-                type="button"
-                style={{
-                  width: "100%",
-                  minHeight: "54px",
-                  marginTop: "24px",
-                  padding: "0 22px",
-                  color: "#ffffff",
-                  background: "#2563eb",
-                  border: "none",
-                  borderRadius: "12px",
-                  fontSize: "16px",
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                Continuar con mi consulta
-              </button>
+         <button
+  type="button"
+  onClick={() => setStatus("checkout")}
+  style={{
+    width: "100%",
+    minHeight: "54px",
+    marginTop: "24px",
+    padding: "0 22px",
+    color: "#ffffff",
+    background: "#2563eb",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "16px",
+    fontWeight: 800,
+    cursor: "pointer",
+  }}
+>
+  Continuar con mi consulta
+</button>
 
               <button
                 type="button"
