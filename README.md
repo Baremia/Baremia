@@ -1,16 +1,20 @@
-## Hi there 👋
+# Baremia v1.1
 
-<!--
-**Baremia/Baremia** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+Primera versión con navegación funcional y páginas de convocatoria.
 
-Here are some ideas to get you started:
+## Rutas
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+- `/` Landing
+- `/convocatorias` Listado de convocatorias
+- `/convocatorias/enfermeria-madrid` Inicio del flujo de estimación
+
+## Desarrollo
+
+```bash
+npm install
+npm run dev
+```
+
+## Despliegue
+
+El proyecto está preparado para Vercel. Los recursos de marca deben permanecer en `public/`.
