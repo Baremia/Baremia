@@ -1,17 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/supabase-admin";
 
-export async function POST(req: NextRequest) {
+type CrearSesionBody = {
+  acceso_id?: string;
+};
+
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json();
+    let body: CrearSesionBody;
 
-    const candidatoId = body.candidato_id;
-
-    if (!candidatoId) {
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
         {
           ok: false,
-          error: "Falta candidato_id",
+          error: "El cuerpo de la petición no es un JSON válido",
+        },
+        { status: 400 }
+      );
+    }
+
+    const accesoId = body.acceso_id?.trim();
+
+    if (!accesoId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Falta acceso_id",
         },
         { status: 400 }
       );
@@ -20,28 +36,62 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabaseAdmin
       .schema("baremia")
       .rpc("crear_sesion", {
-        p_candidato_id: candidatoId,
+        p_acceso_id: accesoId,
       });
 
     if (error) {
+      console.error("Error creando sesión:", error);
+
+      const accesoInvalido =
+        error.message.includes("Acceso no válido") ||
+        error.message.includes("bloqueado");
+
       return NextResponse.json(
         {
           ok: false,
-          error: error.message,
+          error: accesoInvalido
+            ? "El acceso no es válido, está bloqueado o no está activo"
+            : "No se pudo crear la sesión",
+          detalle: error.message,
+        },
+        { status: accesoInvalido ? 403 : 500 }
+      );
+    }
+
+    const sesion = Array.isArray(data) ? data[0] : data;
+
+    if (!sesion?.token || !sesion?.expira_at) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "La sesión no pudo generarse correctamente",
         },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      ok: true,
-      token: data,
-    });
-  } catch {
+    return NextResponse.json(
+      {
+        ok: true,
+        sesion: {
+          token: sesion.token,
+          expira_at: sesion.expira_at,
+        },
+      },
+      {
+        status: 201,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error inesperado en /api/sesion:", error);
+
     return NextResponse.json(
       {
         ok: false,
-        error: "Error interno",
+        error: "Error interno del servidor",
       },
       { status: 500 }
     );
