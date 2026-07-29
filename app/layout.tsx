@@ -1,35 +1,9 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import "./globals.css";
-
-const geist = Geist({
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Baremia",
-  description:
-    "Analizamos listados oficiales para estimar tu posición en procesos selectivos.",
-  manifest: "/manifest.webmanifest",
-  icons: {
-    icon: [
-      {
-        url: "/favicon.ico",
-      },
-      {
-        url: "/favicon-32.png",
-        sizes: "32x32",
-        type: "image/png",
-      },
-      {
-        url: "/favicon-16.png",
-        sizes: "16x16",
-        type: "image/png",
-      },
-    ],
-    shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
+  description: "Consulta tu estimación de posición en procesos OPE",
 };
 
 export default function RootLayout({
@@ -39,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={geist.className}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
