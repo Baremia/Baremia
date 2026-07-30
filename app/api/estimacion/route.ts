@@ -15,59 +15,75 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: sesion, error: errorSesion } = await supabaseAdmin
-      .schema("baremia")
-      .rpc("validar_sesion", {
-        p_token: token,
-      });
-
-    if (errorSesion) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: errorSesion.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    const resultadoSesion = Array.isArray(sesion) ? sesion[0] : sesion;
-
-    if (!resultadoSesion?.valida) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Sesión no válida",
-        },
-        { status: 401 }
-      );
-    }
-
     const { data, error } = await supabaseAdmin
       .schema("baremia")
       .rpc("obtener_estimacion", {
-        p_candidato_id: resultadoSesion.candidato_id,
+        p_token: token,
       });
 
     if (error) {
-      return NextResponse.json(
+      console.error("Error obteniendo estimación:", error);
+
+      const sesionInvalida =
+        error.message.includes("Sesión no válida") ||
+        error.message.includes("sesión no válida");
+
+      const response = NextResponse.json(
         {
           ok: false,
-          error: error.message,
+          error: sesionInvalida
+            ? "La sesión ha caducado o no es válida"
+            : "No se pudo obtener la estimación",
+          detalle: error.message,
         },
-        { status: 500 }
+        { status: sesionInvalida ? 401 : 500 }
       );
+
+      if (sesionInvalida) {
+        response.cookies.set({
+          name: "baremia_session",
+          value: "",
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 0,
+        });
+      }
+
+      return response;
     }
 
-    return NextResponse.json({
-      ok: true,
-      estimacion: Array.isArray(data) ? data[0] : data,
-    });
-  } catch {
+    const estimacion = Array.isArray(data) ? data[0] : data;
+
+    if (!estimacion) {
+      return NextResponse.json({
+        ok: true,
+        encontrada: false,
+        estimacion: null,
+        mensaje: "Todavía no existe una estimación disponible",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        encontrada: true,
+        estimacion,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error inesperado en /api/estimacion:", error);
+
     return NextResponse.json(
       {
         ok: false,
-        error: "Error interno",
+        error: "Error interno del servidor",
       },
       { status: 500 }
     );
