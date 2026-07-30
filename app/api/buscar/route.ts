@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const candidatos = data ?? [];
+    const candidatos = Array.isArray(data) ? data : [];
 
     return NextResponse.json(
       {
