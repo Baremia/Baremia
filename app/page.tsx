@@ -80,10 +80,10 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          nombre: nombre.trim(),
-          dni: dni.trim(),
-        }),
-      });
+  nombre: nombre.trim(),
+  dni: dni.trim(),
+  convocatoria_id: "58ef068a-2176-4466-b959-fe678334e13c",
+}),
 
       const data = await leerJson(response);
 
