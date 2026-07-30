@@ -83,6 +83,7 @@ export default function Home() {
   nombre: nombre.trim(),
   dni: dni.trim(),
   convocatoria_id: "58ef068a-2176-4466-b959-fe678334e13c",
+  }),
 });
 
       const data = await leerJson(response);
@@ -90,7 +91,7 @@ export default function Home() {
       if (!response.ok || !data.ok) {
         throw new Error(
           data.detalle || data.error || "No se pudo realizar la búsqueda"
-        );
+        ;
       }
 
       const resultados: Candidato[] = Array.isArray(data.candidatos)
