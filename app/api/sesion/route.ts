@@ -1,29 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../lib/supabase-admin";
 
-type CrearSesionBody = {
+type Body = {
   acceso_id?: string;
 };
 
 export async function POST(request: NextRequest) {
   try {
-    let body: CrearSesionBody;
+    const body: Body = await request.json();
 
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "El cuerpo de la petición no es un JSON válido",
-        },
-        { status: 400 }
-      );
-    }
-
-    const accesoId = body.acceso_id?.trim();
-
-    if (!accesoId) {
+    if (!body.acceso_id) {
       return NextResponse.json(
         {
           ok: false,
@@ -36,62 +22,52 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .schema("baremia")
       .rpc("crear_sesion", {
-        p_acceso_id: accesoId,
+        p_acceso_id: body.acceso_id,
       });
 
     if (error) {
-      console.error("Error creando sesión:", error);
-
-      const accesoInvalido =
-        error.message.includes("Acceso no válido") ||
-        error.message.includes("bloqueado");
-
       return NextResponse.json(
         {
           ok: false,
-          error: accesoInvalido
-            ? "El acceso no es válido, está bloqueado o no está activo"
-            : "No se pudo crear la sesión",
-          detalle: error.message,
-        },
-        { status: accesoInvalido ? 403 : 500 }
-      );
-    }
-
-    const sesion = Array.isArray(data) ? data[0] : data;
-
-    if (!sesion?.token || !sesion?.expira_at) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "La sesión no pudo generarse correctamente",
+          error: error.message,
         },
         { status: 500 }
       );
     }
 
-    return NextResponse.json(
-      {
-        ok: true,
-        sesion: {
-          token: sesion.token,
-          expira_at: sesion.expira_at,
-        },
-      },
-      {
-        status: 201,
-        headers: {
-          "Cache-Control": "no-store",
-        },
-      }
-    );
-  } catch (error) {
-    console.error("Error inesperado en /api/sesion:", error);
+    const sesion = Array.isArray(data) ? data[0] : data;
 
+    if (!sesion?.token) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "No se pudo generar la sesión",
+        },
+        { status: 500 }
+      );
+    }
+
+    const response = NextResponse.json({
+      ok: true,
+      expira_at: sesion.expira_at,
+    });
+
+    response.cookies.set({
+      name: "baremia_session",
+      value: sesion.token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      expires: new Date(sesion.expira_at),
+    });
+
+    return response;
+  } catch {
     return NextResponse.json(
       {
         ok: false,
-        error: "Error interno del servidor",
+        error: "Error interno",
       },
       { status: 500 }
     );
