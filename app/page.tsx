@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  FormEvent,
+  useState,
+  type CSSProperties,
+} from "react";
+
+const CONVOCATORIA_ID =
+  "58ef068a-2176-4466-b959-fe678334e13c";
 
 type Candidato = {
   candidato_id: string;
@@ -16,7 +23,7 @@ type Estimacion = {
   posicion_estimada: number | null;
   posicion_minima: number | null;
   posicion_maxima: number | null;
-  probabilidad_plaza: number | null;
+  probabilidad_plaza: number | string | null;
   comentario: string | null;
   fecha_calculo: string | null;
 };
@@ -24,18 +31,23 @@ type Estimacion = {
 type Estado =
   | "inicio"
   | "buscando"
-  | "candidato_encontrado"
+  | "resultado"
   | "activando"
+  | "validando"
   | "consultando"
   | "sin_estimacion"
-  | "estimacion_disponible"
+  | "estimacion"
   | "error";
 
 async function leerJson(response: Response) {
   const texto = await response.text();
 
+  if (!texto) {
+    return {};
+  }
+
   try {
-    return texto ? JSON.parse(texto) : {};
+    return JSON.parse(texto);
   } catch {
     return {
       ok: false,
@@ -46,32 +58,43 @@ async function leerJson(response: Response) {
 }
 
 export default function Home() {
-  const [nombre, setNombre] = useState("");
-  const [dni, setDni] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [codigo, setCodigo] = useState("");
+
+  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
+  const [candidato, setCandidato] = useState<Candidato | null>(null);
+  const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
 
   const [estado, setEstado] = useState<Estado>("inicio");
   const [mensaje, setMensaje] = useState("");
-  const [candidatos, setCandidatos] = useState<Candidato[]>([]);
-  const [candidatoSeleccionado, setCandidatoSeleccionado] =
-    useState<Candidato | null>(null);
-
-  const [codigoAcceso, setCodigoAcceso] = useState("");
-  const [estimacion, setEstimacion] = useState<Estimacion | null>(null);
 
   const cargando =
     estado === "buscando" ||
     estado === "activando" ||
+    estado === "validando" ||
     estado === "consultando";
 
-  async function buscarCandidato(event: FormEvent<HTMLFormElement>) {
+  async function buscarCandidato(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
+    const termino = busqueda.trim();
+
+    if (termino.length < 3) {
+      setEstado("error");
+      setMensaje(
+        "Introduce al menos tres caracteres del nombre o del DNI."
+      );
+      return;
+    }
 
     setEstado("buscando");
     setMensaje("");
     setCandidatos([]);
-    setCandidatoSeleccionado(null);
-    setCodigoAcceso("");
+    setCandidato(null);
     setEstimacion(null);
+    setCodigo("");
 
     try {
       const response = await fetch("/api/buscar", {
@@ -80,107 +103,144 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-  nombre: nombre.trim(),
-  dni: dni.trim(),
-  convocatoria_id: "58ef068a-2176-4466-b959-fe678334e13c",
-  }),
-});
+          convocatoria_id: CONVOCATORIA_ID,
+          busqueda: termino,
+        }),
+      });
 
       const data = await leerJson(response);
 
       if (!response.ok || !data.ok) {
         throw new Error(
-          data.detalle || data.error || "No se pudo realizar la búsqueda"
-        ;
+          data.detalle ||
+            data.error ||
+            "No se pudo realizar la búsqueda"
+        );
       }
 
-      const resultados: Candidato[] = Array.isArray(data.candidatos)
+      const resultados: Candidato[] = Array.isArray(
+        data.candidatos
+      )
         ? data.candidatos
         : [];
 
-      if (!data.encontrado || resultados.length === 0) {
+      if (resultados.length === 0) {
         setEstado("inicio");
         setMensaje(
-          "No hemos encontrado ningún candidato con esos datos."
+          "No se ha encontrado ninguna candidatura con esos datos."
         );
         return;
       }
 
       setCandidatos(resultados);
+      setCandidato(
+        resultados.length === 1 ? resultados[0] : null
+      );
+      setEstado("resultado");
 
-      if (resultados.length === 1) {
-        setCandidatoSeleccionado(resultados[0]);
-      }
-
-      setEstado("candidato_encontrado");
       setMensaje(
         resultados.length === 1
-          ? "Candidato encontrado."
-          : "Selecciona el candidato correcto."
+          ? "Candidatura encontrada."
+          : "Selecciona la candidatura correcta."
       );
     } catch (error) {
-      setEstado("error");
-      setMensaje(
-        error instanceof Error
-          ? error.message
-          : "Se produjo un error durante la búsqueda"
-      );
+      mostrarError(error, "No se pudo realizar la búsqueda");
     }
   }
 
-  async function activarYEntrar() {
-    if (!candidatoSeleccionado) {
+  async function generarAccesoPrueba() {
+    if (!candidato) {
       setEstado("error");
-      setMensaje("Primero debes seleccionar un candidato.");
+      setMensaje("Selecciona primero una candidatura.");
       return;
     }
 
     setEstado("activando");
-    setMensaje("Simulando pago y preparando el acceso...");
-    setCodigoAcceso("");
-    setEstimacion(null);
+    setMensaje("Generando el acceso de prueba...");
 
     try {
-      // 1. Simular pago y generar acceso
-      const responseActivacion = await fetch("/api/dev/activar-acceso", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          candidato_id: candidatoSeleccionado.candidato_id,
-        }),
-      });
+      const response = await fetch(
+        "/api/dev/activar-acceso",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            candidato_id: candidato.candidato_id,
+          }),
+        }
+      );
 
-      const activacion = await leerJson(responseActivacion);
+      const data = await leerJson(response);
 
-      if (!responseActivacion.ok || !activacion.ok) {
+      if (!response.ok || !data.ok) {
         throw new Error(
-          activacion.detalle ||
-            activacion.error ||
-            "No se pudo activar el acceso"
+          data.detalle ||
+            data.error ||
+            "No se pudo generar el acceso"
         );
       }
 
-      if (!activacion.codigo_acceso) {
-        throw new Error("No se recibió el código de acceso.");
+      if (!data.codigo_acceso) {
+        throw new Error(
+          "El servidor no devolvió el código de acceso."
+        );
       }
 
-      setCodigoAcceso(activacion.codigo_acceso);
+      setCodigo(data.codigo_acceso);
 
-      // 2. Validar el código generado
-      const responseValidacion = await fetch("/api/validar-acceso", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          candidato_id: candidatoSeleccionado.candidato_id,
-          codigo: activacion.codigo_acceso,
-        }),
-      });
+      await validarCodigo(data.codigo_acceso);
+    } catch (error) {
+      mostrarError(error, "No se pudo generar el acceso");
+    }
+  }
 
-      const validacion = await leerJson(responseValidacion);
+  async function accederConCodigo(
+    event?: FormEvent<HTMLFormElement>
+  ) {
+    event?.preventDefault();
+
+    await validarCodigo(codigo);
+  }
+
+  async function validarCodigo(codigoAValidar: string) {
+    if (!candidato) {
+      setEstado("error");
+      setMensaje("Selecciona primero una candidatura.");
+      return;
+    }
+
+    const codigoLimpio = codigoAValidar.trim().toUpperCase();
+
+    if (!codigoLimpio) {
+      setEstado("error");
+      setMensaje("Introduce tu código de acceso.");
+      return;
+    }
+
+    setCodigo(codigoLimpio);
+    setEstado("validando");
+    setMensaje("Validando el código...");
+
+    try {
+      const responseValidacion = await fetch(
+        "/api/validar-acceso",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            candidato_id: candidato.candidato_id,
+            codigo: codigoLimpio,
+          }),
+        }
+      );
+
+      const validacion = await leerJson(
+        responseValidacion
+      );
 
       if (
         !responseValidacion.ok ||
@@ -190,46 +250,49 @@ export default function Home() {
       ) {
         throw new Error(
           validacion.mensaje ||
+            validacion.detalle ||
             validacion.error ||
-            "El acceso no pudo validarse"
+            "El código no es válido"
         );
       }
 
-      // 3. Crear sesión y recibir cookie HttpOnly
-      const responseSesion = await fetch("/api/sesion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          acceso_id: validacion.acceso_id,
-        }),
-      });
-
-      const sesion = await leerJson(responseSesion);
-
-      if (!responseSesion.ok || !sesion.ok) {
-        throw new Error(
-          sesion.detalle || sesion.error || "No se pudo crear la sesión"
-        );
-      }
-
-      // 4. Consultar automáticamente la estimación
-      await consultarEstimacion();
+      await crearSesion(validacion.acceso_id);
     } catch (error) {
-      setEstado("error");
-      setMensaje(
-        error instanceof Error
-          ? error.message
-          : "No se pudo completar el acceso"
+      mostrarError(error, "No se pudo validar el código");
+    }
+  }
+
+  async function crearSesion(accesoId: string) {
+    setEstado("validando");
+    setMensaje("Creando la sesión segura...");
+
+    const response = await fetch("/api/sesion", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        acceso_id: accesoId,
+      }),
+    });
+
+    const data = await leerJson(response);
+
+    if (!response.ok || !data.ok) {
+      throw new Error(
+        data.detalle ||
+          data.error ||
+          "No se pudo crear la sesión"
       );
     }
+
+    await consultarEstimacion();
   }
 
   async function consultarEstimacion() {
     setEstado("consultando");
-    setMensaje("Consultando la estimación...");
+    setMensaje("Consultando tu estimación...");
 
     try {
       const response = await fetch("/api/estimacion", {
@@ -242,7 +305,9 @@ export default function Home() {
 
       if (!response.ok || !data.ok) {
         throw new Error(
-          data.detalle || data.error || "No se pudo consultar la estimación"
+          data.detalle ||
+            data.error ||
+            "No se pudo consultar la estimación"
         );
       }
 
@@ -250,222 +315,280 @@ export default function Home() {
         setEstimacion(null);
         setEstado("sin_estimacion");
         setMensaje(
-          data.mensaje || "Todavía no existe una estimación disponible."
+          data.mensaje ||
+            "Todavía no existe una estimación disponible."
         );
         return;
       }
 
       setEstimacion(data.estimacion);
-      setEstado("estimacion_disponible");
+      setEstado("estimacion");
       setMensaje("Estimación obtenida correctamente.");
     } catch (error) {
-      setEstado("error");
-      setMensaje(
-        error instanceof Error
-          ? error.message
-          : "No se pudo consultar la estimación"
+      mostrarError(
+        error,
+        "No se pudo consultar la estimación"
       );
     }
   }
 
+  function mostrarError(
+    error: unknown,
+    mensajePredeterminado: string
+  ) {
+    console.error(error);
+
+    setEstado("error");
+    setMensaje(
+      error instanceof Error
+        ? error.message
+        : mensajePredeterminado
+    );
+  }
+
   function reiniciar() {
-    setNombre("");
-    setDni("");
+    setBusqueda("");
+    setCodigo("");
+    setCandidatos([]);
+    setCandidato(null);
+    setEstimacion(null);
     setEstado("inicio");
     setMensaje("");
-    setCandidatos([]);
-    setCandidatoSeleccionado(null);
-    setCodigoAcceso("");
-    setEstimacion(null);
   }
 
   return (
     <main style={styles.main}>
-      <section style={styles.container}>
+      <div style={styles.container}>
         <header style={styles.header}>
           <div style={styles.logo}>B</div>
 
           <div>
             <h1 style={styles.title}>Baremia</h1>
             <p style={styles.subtitle}>
-              Consulta tu posición estimada en procesos selectivos
+              Consulta tu posición estimada en la OPE
             </p>
           </div>
         </header>
 
-        <div style={styles.notice}>
-          <strong>Entorno de desarrollo.</strong> El pago se simula para
-          comprobar el funcionamiento completo de la plataforma.
+        <div style={styles.developmentNotice}>
+          <strong>Versión de desarrollo.</strong>{" "}
+          Actualmente el pago se simula para comprobar el
+          funcionamiento de la plataforma.
         </div>
 
-        <form onSubmit={buscarCandidato} style={styles.card}>
-          <h2 style={styles.cardTitle}>Busca tu candidatura</h2>
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>
+            Busca tu candidatura
+          </h2>
 
-          <label style={styles.label}>
-            Nombre y apellidos
-            <input
-              style={styles.input}
-              type="text"
-              value={nombre}
-              onChange={(event) => setNombre(event.target.value)}
-              placeholder="Ejemplo: Rafael García"
-              autoComplete="name"
-              required
-              disabled={cargando}
-            />
-          </label>
+          <p style={styles.helpText}>
+            Introduce tu nombre completo o tu DNI.
+          </p>
 
-          <label style={styles.label}>
-            DNI
+          <form onSubmit={buscarCandidato}>
             <input
-              style={styles.input}
               type="text"
-              value={dni}
+              value={busqueda}
               onChange={(event) =>
-                setDni(event.target.value.toUpperCase())
+                setBusqueda(event.target.value)
               }
-              placeholder="Ejemplo: 12345678A"
-              autoComplete="off"
-              required
+              placeholder="Rafael García o 12345678A"
+              style={styles.input}
               disabled={cargando}
+              autoComplete="off"
             />
-          </label>
 
-          <button style={styles.primaryButton} disabled={cargando}>
-            {estado === "buscando"
-              ? "Buscando..."
-              : "Buscar candidatura"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              style={styles.primaryButton}
+              disabled={cargando}
+            >
+              {estado === "buscando"
+                ? "Buscando..."
+                : "Buscar candidatura"}
+            </button>
+          </form>
+        </section>
 
         {candidatos.length > 0 && (
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>Resultado</h2>
+            <h2 style={styles.cardTitle}>
+              Candidatura encontrada
+            </h2>
 
             <div style={styles.candidateList}>
-              {candidatos.map((candidato) => {
+              {candidatos.map((item) => {
                 const seleccionado =
-                  candidatoSeleccionado?.candidato_id ===
-                  candidato.candidato_id;
+                  candidato?.candidato_id ===
+                  item.candidato_id;
 
                 return (
                   <button
-                    key={candidato.candidato_id}
+                    key={item.candidato_id}
                     type="button"
-                    onClick={() => setCandidatoSeleccionado(candidato)}
+                    onClick={() => setCandidato(item)}
+                    disabled={cargando}
                     style={{
-                      ...styles.candidateButton,
+                      ...styles.candidate,
                       ...(seleccionado
-                        ? styles.candidateButtonSelected
+                        ? styles.candidateSelected
                         : {}),
                     }}
-                    disabled={cargando}
                   >
-                    <strong>{candidato.nombre}</strong>
-                    <span>{candidato.dni_mostrado}</span>
-                    <span>{candidato.convocatoria}</span>
+                    <strong>{item.nombre}</strong>
+                    <span>{item.dni_mostrado}</span>
+                    <span>{item.convocatoria}</span>
                     <small>
-                      Estado: {candidato.estado_convocatoria}
+                      Estado: {item.estado_convocatoria}
                     </small>
                   </button>
                 );
               })}
             </div>
 
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={activarYEntrar}
-              disabled={!candidatoSeleccionado || cargando}
-            >
-              {estado === "activando" || estado === "consultando"
-                ? "Preparando consulta..."
-                : "Simular pago y consultar"}
-            </button>
+            {candidato && (
+              <>
+                <div style={styles.separator} />
+
+                <h3 style={styles.sectionTitle}>
+                  Acceso a la consulta
+                </h3>
+
+                <form onSubmit={accederConCodigo}>
+                  <label style={styles.label}>
+                    Código de acceso
+                  </label>
+
+                  <input
+                    type="text"
+                    value={codigo}
+                    onChange={(event) =>
+                      setCodigo(
+                        event.target.value.toUpperCase()
+                      )
+                    }
+                    placeholder="BRM-XXXX-XXXX-XXXX-XXXX"
+                    style={styles.input}
+                    disabled={cargando}
+                    autoComplete="off"
+                  />
+
+                  <button
+                    type="submit"
+                    style={styles.primaryButton}
+                    disabled={cargando || !codigo.trim()}
+                  >
+                    {estado === "validando"
+                      ? "Validando..."
+                      : "Acceder con mi código"}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={generarAccesoPrueba}
+                  style={styles.secondaryButton}
+                  disabled={cargando}
+                >
+                  {estado === "activando"
+                    ? "Generando..."
+                    : "Simular pago y generar código"}
+                </button>
+
+                <p style={styles.smallText}>
+                  El botón de simulación es temporal y será
+                  sustituido por Stripe.
+                </p>
+              </>
+            )}
           </section>
         )}
 
         {mensaje && (
-          <section
+          <div
             style={{
               ...styles.message,
               ...(estado === "error"
                 ? styles.errorMessage
-                : styles.normalMessage),
+                : styles.successMessage),
             }}
           >
             {mensaje}
-          </section>
+          </div>
         )}
 
-        {codigoAcceso && (
+        {codigo && estado !== "error" && (
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>Código de acceso generado</h2>
+            <h2 style={styles.cardTitle}>
+              Tu código de acceso
+            </h2>
 
-            <p style={styles.code}>{codigoAcceso}</p>
+            <div style={styles.code}>{codigo}</div>
 
             <p style={styles.helpText}>
-              En producción, este código se mostrará una sola vez después
-              del pago. El usuario deberá conservarlo para futuras consultas.
+              Guarda este código. Será necesario para volver
+              a consultar futuras actualizaciones.
             </p>
           </section>
         )}
 
         {estado === "sin_estimacion" && (
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>Consulta activada</h2>
+            <h2 style={styles.cardTitle}>
+              Acceso correcto
+            </h2>
 
             <p style={styles.emptyTitle}>
               Todavía no hay una estimación disponible
             </p>
 
             <p style={styles.helpText}>
-              La autenticación y la sesión funcionan correctamente. Solo
-              falta incorporar una estimación para este candidato en la base
-              de datos.
+              La candidatura, el código y la sesión se han
+              validado correctamente. Ahora falta incorporar
+              una estimación a la base de datos.
             </p>
 
             <button
               type="button"
-              style={styles.secondaryButton}
               onClick={consultarEstimacion}
+              style={styles.secondaryButton}
             >
               Volver a consultar
             </button>
           </section>
         )}
 
-        {estado === "estimacion_disponible" && estimacion && (
+        {estado === "estimacion" && estimacion && (
           <section style={styles.card}>
             <h2 style={styles.cardTitle}>
               Tu estimación
             </h2>
 
-            <p style={styles.convocatoria}>
+            <p style={styles.helpText}>
               {estimacion.convocatoria}
             </p>
 
             <div style={styles.metrics}>
-              <article style={styles.metric}>
+              <div style={styles.metric}>
                 <span style={styles.metricLabel}>
                   Posición estimada
                 </span>
                 <strong style={styles.metricValue}>
                   {estimacion.posicion_estimada ?? "—"}
                 </strong>
-              </article>
+              </div>
 
-              <article style={styles.metric}>
+              <div style={styles.metric}>
                 <span style={styles.metricLabel}>
-                  Intervalo estimado
+                  Intervalo
                 </span>
                 <strong style={styles.metricValueSmall}>
                   {estimacion.posicion_minima ?? "—"} –{" "}
                   {estimacion.posicion_maxima ?? "—"}
                 </strong>
-              </article>
+              </div>
 
-              <article style={styles.metric}>
+              <div style={styles.metric}>
                 <span style={styles.metricLabel}>
                   Probabilidad de plaza
                 </span>
@@ -474,7 +597,7 @@ export default function Home() {
                     ? `${estimacion.probabilidad_plaza}%`
                     : "—"}
                 </strong>
-              </article>
+              </div>
             </div>
 
             {estimacion.comentario && (
@@ -484,7 +607,7 @@ export default function Home() {
             )}
 
             {estimacion.fecha_calculo && (
-              <p style={styles.helpText}>
+              <p style={styles.smallText}>
                 Última actualización:{" "}
                 {new Date(
                   estimacion.fecha_calculo
@@ -495,31 +618,30 @@ export default function Home() {
         )}
 
         {(candidatos.length > 0 ||
-          codigoAcceso ||
-          estimacion ||
-          estado === "error") && (
+          estado === "error" ||
+          estado === "sin_estimacion" ||
+          estado === "estimacion") && (
           <button
             type="button"
-            style={styles.resetButton}
             onClick={reiniciar}
+            style={styles.resetButton}
             disabled={cargando}
           >
             Empezar de nuevo
           </button>
         )}
-      </section>
+      </div>
     </main>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   main: {
     minHeight: "100vh",
-    background: "#f4f7fb",
-    padding: "40px 16px",
-    color: "#162033",
-    fontFamily:
-      "Arial, Helvetica, sans-serif",
+    padding: "36px 16px",
+    background: "#f3f6fa",
+    color: "#172033",
+    fontFamily: "Arial, Helvetica, sans-serif",
   },
   container: {
     width: "100%",
@@ -529,18 +651,18 @@ const styles: Record<string, React.CSSProperties> = {
   header: {
     display: "flex",
     alignItems: "center",
-    gap: "16px",
+    gap: "15px",
     marginBottom: "24px",
   },
   logo: {
-    width: "52px",
-    height: "52px",
-    borderRadius: "14px",
     display: "grid",
     placeItems: "center",
+    width: "54px",
+    height: "54px",
+    borderRadius: "15px",
     background: "#173b67",
-    color: "white",
-    fontSize: "28px",
+    color: "#ffffff",
+    fontSize: "29px",
     fontWeight: 800,
   },
   title: {
@@ -548,63 +670,67 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "32px",
   },
   subtitle: {
-    margin: "6px 0 0",
-    color: "#5e6b7c",
+    margin: "5px 0 0",
+    color: "#657084",
   },
-  notice: {
-    padding: "14px 16px",
+  developmentNotice: {
     marginBottom: "18px",
+    padding: "14px 16px",
+    border: "1px solid #e0c779",
     borderRadius: "12px",
-    background: "#fff4d8",
-    border: "1px solid #ead391",
+    background: "#fff5d8",
     lineHeight: 1.5,
   },
   card: {
-    background: "white",
-    border: "1px solid #dfe6ef",
-    borderRadius: "18px",
-    padding: "24px",
     marginBottom: "18px",
-    boxShadow: "0 8px 30px rgba(25, 50, 80, 0.06)",
+    padding: "24px",
+    border: "1px solid #dce3ec",
+    borderRadius: "18px",
+    background: "#ffffff",
+    boxShadow: "0 8px 28px rgba(20, 45, 75, 0.06)",
   },
   cardTitle: {
-    margin: "0 0 20px",
+    margin: "0 0 16px",
     fontSize: "21px",
+  },
+  sectionTitle: {
+    margin: "0 0 14px",
+    fontSize: "18px",
   },
   label: {
     display: "block",
-    marginBottom: "16px",
+    marginBottom: "8px",
     fontWeight: 700,
   },
   input: {
-    width: "100%",
     boxSizing: "border-box",
-    marginTop: "8px",
-    padding: "13px 14px",
-    border: "1px solid #bdc8d6",
-    borderRadius: "10px",
+    width: "100%",
+    marginBottom: "13px",
+    padding: "14px",
+    border: "1px solid #b9c4d1",
+    borderRadius: "11px",
+    background: "#ffffff",
+    color: "#172033",
     fontSize: "16px",
-    background: "white",
-    color: "#162033",
   },
   primaryButton: {
     width: "100%",
+    padding: "14px 18px",
     border: 0,
     borderRadius: "11px",
-    padding: "14px 18px",
     background: "#173b67",
-    color: "white",
+    color: "#ffffff",
     fontSize: "16px",
     fontWeight: 700,
     cursor: "pointer",
   },
   secondaryButton: {
     width: "100%",
+    marginTop: "12px",
+    padding: "13px 18px",
     border: "1px solid #173b67",
     borderRadius: "11px",
-    padding: "13px 18px",
-    marginTop: "16px",
-    background: "white",
+    background: "#ffffff",
     color: "#173b67",
     fontSize: "16px",
     fontWeight: 700,
@@ -612,78 +738,85 @@ const styles: Record<string, React.CSSProperties> = {
   },
   candidateList: {
     display: "grid",
-    gap: "12px",
-    marginBottom: "18px",
+    gap: "11px",
   },
-  candidateButton: {
+  candidate: {
     display: "grid",
     gap: "5px",
     width: "100%",
     padding: "16px",
-    textAlign: "left",
-    border: "1px solid #ccd6e2",
+    border: "1px solid #c7d1dd",
     borderRadius: "12px",
-    background: "white",
-    color: "#162033",
+    background: "#ffffff",
+    color: "#172033",
+    textAlign: "left",
     cursor: "pointer",
   },
-  candidateButtonSelected: {
+  candidateSelected: {
     border: "2px solid #173b67",
-    background: "#eef5fc",
+    background: "#edf4fb",
+  },
+  separator: {
+    height: "1px",
+    margin: "22px 0",
+    background: "#dfe5ec",
   },
   message: {
+    marginBottom: "18px",
     padding: "14px 16px",
     borderRadius: "12px",
-    marginBottom: "18px",
     lineHeight: 1.5,
   },
-  normalMessage: {
-    background: "#eaf6ef",
-    border: "1px solid #abd2ba",
+  successMessage: {
+    border: "1px solid #a9d0b6",
+    background: "#eaf6ee",
   },
   errorMessage: {
+    border: "1px solid #e2aaaa",
     background: "#fdecec",
-    border: "1px solid #e3aaaa",
     color: "#8e2020",
   },
   code: {
-    padding: "16px",
-    borderRadius: "10px",
+    padding: "17px",
+    borderRadius: "11px",
     background: "#101828",
-    color: "white",
+    color: "#ffffff",
     fontFamily: "monospace",
     fontSize: "18px",
     textAlign: "center",
-    wordBreak: "break-all",
+    wordBreak: "break-word",
   },
   helpText: {
-    color: "#5e6b7c",
+    color: "#657084",
     lineHeight: 1.6,
+  },
+  smallText: {
+    marginBottom: 0,
+    color: "#657084",
+    fontSize: "13px",
+    lineHeight: 1.5,
   },
   emptyTitle: {
     fontSize: "18px",
     fontWeight: 700,
   },
-  convocatoria: {
-    color: "#5e6b7c",
-    marginTop: "-10px",
-  },
   metrics: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(165px, 1fr))",
     gap: "12px",
     marginTop: "20px",
   },
   metric: {
     padding: "18px",
     borderRadius: "14px",
-    background: "#f3f6fa",
+    background: "#f2f5f9",
     textAlign: "center",
   },
   metricLabel: {
     display: "block",
     marginBottom: "10px",
-    color: "#5e6b7c",
+    color: "#657084",
     fontSize: "14px",
   },
   metricValue: {
@@ -692,21 +825,21 @@ const styles: Record<string, React.CSSProperties> = {
   },
   metricValueSmall: {
     display: "block",
-    fontSize: "23px",
+    fontSize: "22px",
   },
   comment: {
     marginTop: "18px",
     padding: "16px",
     borderLeft: "4px solid #173b67",
-    background: "#f3f6fa",
+    background: "#f2f5f9",
     lineHeight: 1.6,
   },
   resetButton: {
     display: "block",
-    margin: "10px auto 0",
+    margin: "8px auto 0",
     border: 0,
     background: "transparent",
-    color: "#5e6b7c",
+    color: "#657084",
     textDecoration: "underline",
     cursor: "pointer",
   },
