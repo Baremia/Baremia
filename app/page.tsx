@@ -83,7 +83,7 @@ export default function Home() {
   nombre: nombre.trim(),
   dni: dni.trim(),
   convocatoria_id: "58ef068a-2176-4466-b959-fe678334e13c",
-}),
+});
 
       const data = await leerJson(response);
 
