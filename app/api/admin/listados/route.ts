@@ -45,6 +45,58 @@ export async function GET(request: NextRequest) {
   const action = cleanText(request.nextUrl.searchParams.get("action"));
   const id = cleanText(request.nextUrl.searchParams.get("id"));
 
+  if (action === "result") {
+    if (!id) {
+      return NextResponse.json({ ok: false, error: "Falta el identificador." }, { status: 400 });
+    }
+
+    const { data: proceso, error: procesoError } = await supabaseAdmin
+      .schema("baremia")
+      .from("procesos_ia")
+      .select("detalles,estado")
+      .eq("listado_id", id)
+      .eq("estado", "completado")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (procesoError) {
+      return NextResponse.json(
+        { ok: false, error: "No se pudo localizar el resultado procesado." },
+        { status: 500 }
+      );
+    }
+
+    const detalles = proceso?.detalles;
+    const rutaProcesada =
+      detalles &&
+      typeof detalles === "object" &&
+      "ruta_procesada" in detalles &&
+      typeof detalles.ruta_procesada === "string"
+        ? detalles.ruta_procesada
+        : "";
+
+    if (!rutaProcesada) {
+      return NextResponse.json(
+        { ok: false, error: "Este listado todavía no tiene un resultado disponible." },
+        { status: 404 }
+      );
+    }
+
+    const { data, error } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .createSignedUrl(rutaProcesada, 60);
+
+    if (error || !data?.signedUrl) {
+      return NextResponse.json(
+        { ok: false, error: "No se pudo abrir el resultado procesado." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, url: data.signedUrl });
+  }
+
   if (action === "download") {
     if (!id) {
       return NextResponse.json({ ok: false, error: "Falta el identificador." }, { status: 400 });
