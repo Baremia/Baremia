@@ -46,6 +46,7 @@ export default function ListadosManager() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -135,6 +136,38 @@ export default function ListadosManager() {
       setError(downloadError instanceof Error ? downloadError.message : "No se pudo descargar el PDF.");
     } finally {
       setDownloadingId(null);
+    }
+  }
+
+  async function processListado(item: Listado) {
+    if (!window.confirm(`¿Procesar “${item.nombre_archivo}”?`)) return;
+
+    setProcessingId(item.id);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/procesar-listado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listado_id: item.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(getErrorMessage(payload, "No se pudo procesar el listado."));
+
+      const paginas = payload.resultado?.paginas ?? 0;
+      const lineas = payload.resultado?.lineas ?? 0;
+      setMessage(`PDF procesado: ${paginas} páginas y ${lineas} líneas extraídas.`);
+      await loadData();
+    } catch (processingError) {
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : "No se pudo procesar el listado."
+      );
+      await loadData();
+    } finally {
+      setProcessingId(null);
     }
   }
 
@@ -273,6 +306,18 @@ export default function ListadosManager() {
                     </dl>
                   </div>
                   <div className="admin-record-actions">
+                    <button
+                      className="button button-primary"
+                      type="button"
+                      onClick={() => void processListado(item)}
+                      disabled={processingId === item.id || item.estado === "procesando"}
+                    >
+                      {processingId === item.id || item.estado === "procesando"
+                        ? "Procesando…"
+                        : item.estado === "procesado"
+                          ? "Reprocesar PDF"
+                          : "Procesar PDF"}
+                    </button>
                     <button type="button" onClick={() => void download(item)} disabled={downloadingId === item.id}>
                       {downloadingId === item.id ? "Abriendo…" : "Descargar"}
                     </button>
