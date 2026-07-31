@@ -1,68 +1,69 @@
-import { supabaseAdmin } from "../../../lib/supabase-admin";
+"use client";
 
-type Metric = {
-  label: string;
-  value: number | null;
-  helper: string;
+import { useCallback, useEffect, useState } from "react";
+import DashboardStats, {
+  type DashboardMetrics,
+} from "../../../components/admin/DashboardStats";
+import RecentActivity, {
+  type DashboardActivity,
+} from "../../../components/admin/RecentActivity";
+
+type DashboardResponse = {
+  ok: boolean;
+  metrics?: DashboardMetrics;
+  actividad?: DashboardActivity[];
+  generatedAt?: string;
+  error?: string;
 };
 
-async function countRows(table: string) {
-  const { count, error } = await supabaseAdmin
-    .schema("baremia")
-    .from(table)
-    .select("*", { count: "exact", head: true });
+const emptyMetrics: DashboardMetrics = {
+  convocatorias: null,
+  candidatos: null,
+  listados: null,
+  estimaciones: null,
+  pagos: null,
+  procesosIa: null,
+};
 
-  if (error) {
-    console.error(`No se pudo contar ${table}:`, error);
-    return null;
-  }
+export default function AdminDashboardPage() {
+  const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
+  const [activity, setActivity] = useState<DashboardActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
 
-  return count ?? 0;
-}
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
-export default async function AdminDashboardPage() {
-  const [convocatorias, candidatos, listados, estimaciones, pagos, procesosIa] =
-    await Promise.all([
-      countRows("convocatorias"),
-      countRows("candidatos"),
-      countRows("listados"),
-      countRows("estimaciones"),
-      countRows("pagos"),
-      countRows("procesos_ia"),
-    ]);
+    try {
+      const response = await fetch("/api/admin/dashboard", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = (await response.json()) as DashboardResponse;
 
-  const metrics: Metric[] = [
-    {
-      label: "Convocatorias",
-      value: convocatorias,
-      helper: "Procesos registrados",
-    },
-    {
-      label: "Candidatos",
-      value: candidatos,
-      helper: "Personas localizables",
-    },
-    {
-      label: "Listados",
-      value: listados,
-      helper: "Documentos oficiales",
-    },
-    {
-      label: "Estimaciones",
-      value: estimaciones,
-      helper: "Resultados calculados",
-    },
-    {
-      label: "Pagos",
-      value: pagos,
-      helper: "Operaciones registradas",
-    },
-    {
-      label: "Procesos IA",
-      value: procesosIa,
-      helper: "Ejecuciones registradas",
-    },
-  ];
+      if (!response.ok || !data.ok || !data.metrics) {
+        throw new Error(data.error || "No se pudo cargar el dashboard.");
+      }
+
+      setMetrics(data.metrics);
+      setActivity(data.actividad ?? []);
+      setGeneratedAt(data.generatedAt ?? null);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "No se pudo cargar el dashboard."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboard();
+  }, [loadDashboard]);
 
   return (
     <div className="admin-page">
@@ -72,52 +73,22 @@ export default async function AdminDashboardPage() {
           <h1>Dashboard</h1>
           <p>Estado actual de la plataforma y sus principales recursos.</p>
         </div>
-        <span className="admin-live-badge">Sistema conectado</span>
+        <button
+          type="button"
+          className="admin-live-badge"
+          onClick={() => void loadDashboard()}
+          disabled={loading}
+        >
+          {loading ? "Actualizando…" : "Actualizar datos"}
+        </button>
       </header>
 
-      <section className="admin-metrics-grid" aria-label="Métricas principales">
-        {metrics.map((metric) => (
-          <article key={metric.label} className="admin-metric-card">
-            <span>{metric.label}</span>
-            <strong>{metric.value === null ? "—" : metric.value}</strong>
-            <small>{metric.helper}</small>
-          </article>
-        ))}
-      </section>
+      {error && <p className="admin-alert admin-alert-error">{error}</p>}
+
+      <DashboardStats metrics={metrics} />
 
       <section className="admin-dashboard-grid">
-        <article className="admin-panel-card">
-          <div className="admin-panel-heading">
-            <div>
-              <p className="admin-eyebrow">PRÓXIMOS PASOS</p>
-              <h2>Centro de operaciones</h2>
-            </div>
-          </div>
-
-          <div className="admin-task-list">
-            <div>
-              <span>1</span>
-              <div>
-                <strong>Gestionar convocatorias</strong>
-                <p>Crear, editar, activar y archivar procesos selectivos.</p>
-              </div>
-            </div>
-            <div>
-              <span>2</span>
-              <div>
-                <strong>Subir listados oficiales</strong>
-                <p>Registrar los PDF y controlar su procesamiento.</p>
-              </div>
-            </div>
-            <div>
-              <span>3</span>
-              <div>
-                <strong>Publicar estimaciones</strong>
-                <p>Revisar resultados antes de mostrarlos a los usuarios.</p>
-              </div>
-            </div>
-          </div>
-        </article>
+        <RecentActivity items={activity} />
 
         <aside className="admin-panel-card admin-status-card">
           <p className="admin-eyebrow">ESTADO</p>
@@ -129,6 +100,14 @@ export default async function AdminDashboardPage() {
             <li className="pending"><span /> Carga de PDF pendiente</li>
             <li className="pending"><span /> Motor IA pendiente</li>
           </ul>
+          {generatedAt && (
+            <small>
+              Actualizado: {new Intl.DateTimeFormat("es-ES", {
+                dateStyle: "short",
+                timeStyle: "medium",
+              }).format(new Date(generatedAt))}
+            </small>
+          )}
         </aside>
       </section>
     </div>
