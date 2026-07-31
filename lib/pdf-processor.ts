@@ -15,7 +15,10 @@ function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
-      const timer = setTimeout(() => reject(new Error("El PDF tardó demasiado en procesarse.")), milliseconds);
+      const timer = setTimeout(
+        () => reject(new Error("El PDF tardó demasiado en procesarse.")),
+        milliseconds
+      );
       timer.unref?.();
     }),
   ]);
@@ -27,7 +30,9 @@ export async function extractPdfText(buffer: ArrayBuffer): Promise<PdfProcessing
   });
 
   if (pdf.numPages > MAX_PAGES) {
-    throw new Error(`El PDF tiene ${pdf.numPages} páginas. El máximo automático es ${MAX_PAGES}.`);
+    throw new Error(
+      `El PDF tiene ${pdf.numPages} páginas. El máximo automático es ${MAX_PAGES}.`
+    );
   }
 
   const result = await withTimeout(
@@ -35,9 +40,12 @@ export async function extractPdfText(buffer: ArrayBuffer): Promise<PdfProcessing
     EXTRACTION_TIMEOUT_MS
   );
 
-  const text = typeof result.text === "string" ? result.text.trim() : result.text.join("\n").trim();
+  // Con mergePages: true, unpdf devuelve result.text como string.
+  const text = result.text.trim();
   const characters = text.length;
-  const lines = text ? text.split(/\r?\n/).filter((line) => line.trim()).length : 0;
+  const lines = text
+    ? text.split(/\r?\n/).filter((line) => line.trim().length > 0).length
+    : 0;
   const requiresOcr = characters < Math.max(200, result.totalPages * 40);
 
   return {
