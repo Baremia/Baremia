@@ -26,6 +26,18 @@ type Estimacion = {
   probabilidad_plaza: number | string | null;
   comentario: string | null;
   fecha_calculo: string | null;
+  puntuacion_oposicion: number | string | null;
+  meritos_estimados: number | string | null;
+  puntuacion_total_estimada: number | string | null;
+  nivel_confianza: string | null;
+  metodo_estimacion: string | null;
+  datos_modelo: {
+    plazas_aplicables?: number;
+    cupo?: string;
+    coincidencia_bolsa?: boolean;
+    fecha_corte_bolsa?: string;
+    nota?: string;
+  } | null;
 };
 
 type Estado =
@@ -600,11 +612,37 @@ export default function Home() {
               </div>
             </div>
 
-            {estimacion.comentario && (
-              <div style={styles.comment}>
-                {estimacion.comentario}
+            <div style={styles.metrics}>
+              <div style={styles.metric}>
+                <span style={styles.metricLabel}>Oposición oficial</span>
+                <strong style={styles.metricValueSmall}>
+                  {estimacion.puntuacion_oposicion ?? "—"} / 50
+                </strong>
               </div>
-            )}
+
+              <div style={styles.metric}>
+                <span style={styles.metricLabel}>Méritos estimados</span>
+                <strong style={styles.metricValueSmall}>
+                  {estimacion.meritos_estimados ?? "—"} / 50
+                </strong>
+              </div>
+
+              <div style={styles.metric}>
+                <span style={styles.metricLabel}>Total estimado</span>
+                <strong style={styles.metricValueSmall}>
+                  {estimacion.puntuacion_total_estimada ?? "—"} / 100
+                </strong>
+              </div>
+            </div>
+
+            <div style={styles.comment}>
+              <strong>Confianza: {estimacion.nivel_confianza ?? "no disponible"}</strong>
+              {estimacion.comentario && <p>{estimacion.comentario}</p>}
+              {estimacion.datos_modelo?.plazas_aplicables && (
+                <p>Plazas aplicables al cupo: {estimacion.datos_modelo.plazas_aplicables}</p>
+              )}
+              {estimacion.datos_modelo?.nota && <p>{estimacion.datos_modelo.nota}</p>}
+            </div>
 
             {estimacion.fecha_calculo && (
               <p style={styles.smallText}>

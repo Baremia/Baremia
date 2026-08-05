@@ -29,10 +29,10 @@ type ResultadoProcesado = {
   listado_id?: unknown;
   convocatoria_id?: unknown;
   extraccion?: {
+    formato?: unknown;
     registros?: unknown;
     total_esperado?: unknown;
     total_coincide?: unknown;
-    avisos?: unknown;
   };
 };
 
@@ -47,7 +47,27 @@ function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function validateRecords(records: RegistroProcesado[]) {
+function numberOrNull(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function dniFragment(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : digits;
+}
+
+function validateOpposition(records: RegistroProcesado[]) {
   const errors: string[] = [];
   const registrations = new Set<string>();
 
@@ -78,10 +98,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     listadoId = text(body?.listado_id);
   } catch {
-    return NextResponse.json(
-      { ok: false, error: "Solicitud no válida." },
-      { status: 400 }
-    );
+    return NextResponse.json({ ok: false, error: "Solicitud no válida." }, { status: 400 });
   }
 
   if (!listadoId) {
@@ -98,10 +115,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (listadoError || !listado) {
-    return NextResponse.json(
-      { ok: false, error: "El listado no existe." },
-      { status: 404 }
-    );
+    return NextResponse.json({ ok: false, error: "El listado no existe." }, { status: 404 });
   }
 
   const { data: proceso, error: procesoError } = await supabaseAdmin
@@ -160,10 +174,7 @@ export async function POST(request: NextRequest) {
 
   if (parsed.version !== "baremia-parser-v2") {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "Reprocesa el PDF antes de importarlo; el resultado usa una versión antigua del parser.",
-      },
+      { ok: false, error: "Reprocesa el PDF antes de importarlo." },
       { status: 409 }
     );
   }
@@ -178,8 +189,7 @@ export async function POST(request: NextRequest) {
   const records = Array.isArray(parsed.extraccion?.registros)
     ? (parsed.extraccion?.registros as RegistroProcesado[])
     : [];
-  const expectedTotal = Number(parsed.extraccion?.total_esperado);
-  const totalMatches = parsed.extraccion?.total_coincide === true;
+  const format = text(parsed.extraccion?.formato);
 
   if (records.length === 0) {
     return NextResponse.json(
@@ -188,25 +198,101 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (format === "madrid_bolsa_alfabetica") {
+    const { error: deleteReferenceError } = await supabaseAdmin
+      .from("meritos_referencia")
+      .delete()
+      .eq("listado_id", listadoId);
+
+    if (deleteReferenceError) {
+      return NextResponse.json(
+        { ok: false, error: "No se pudieron preparar los méritos existentes.", detalle: deleteReferenceError.message },
+        { status: 500 }
+      );
+    }
+
+    let imported = 0;
+    for (let start = 0; start < records.length; start += BATCH_SIZE) {
+      const rows = records.slice(start, start + BATCH_SIZE).map((record) => {
+        const extra =
+          record.datos_extra && typeof record.datos_extra === "object"
+            ? (record.datos_extra as Record<string, unknown>)
+            : {};
+        const name = text(record.nombre_publicado);
+        const dni = text(record.dni_publicado);
+        return {
+          convocatoria_id: listado.convocatoria_id,
+          listado_id: listadoId,
+          nombre_publicado: name,
+          nombre_normalizado: normalizeName(name),
+          dni_publicado: dni || null,
+          dni_fragmento: dniFragment(dni) || null,
+          formacion_bolsa: numberOrNull(extra.formacion),
+          experiencia_bolsa: numberOrNull(extra.experiencia),
+          total_bolsa: numberOrNull(record.puntuacion_total),
+          fecha_corte: "2024-09-30",
+        };
+      });
+
+      const { error } = await supabaseAdmin.from("meritos_referencia").insert(rows);
+      if (error) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "La importación de méritos se interrumpió.",
+            detalle: error.message,
+            registros_importados: imported,
+          },
+          { status: 500 }
+        );
+      }
+      imported += rows.length;
+    }
+
+    await Promise.all([
+      supabaseAdmin.from("listados").update({ total_registros: imported }).eq("id", listadoId),
+      supabaseAdmin
+        .from("procesos_ia")
+        .update({
+          detalles: {
+            ...details,
+            importacion: {
+              estado: "completada",
+              tipo: "meritos_referencia",
+              importado_at: new Date().toISOString(),
+              registros_importados: imported,
+            },
+          },
+        })
+        .eq("id", proceso.id),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      tipo_importacion: "meritos_referencia",
+      registros_importados: imported,
+      mensaje: `${imported} registros de bolsa importados como referencia de méritos.`,
+    });
+  }
+
+  const expectedTotal = Number(parsed.extraccion?.total_esperado);
+  const totalMatches = parsed.extraccion?.total_coincide === true;
+
   if (!Number.isInteger(expectedTotal) || expectedTotal <= 0 || !totalMatches) {
     return NextResponse.json(
       {
         ok: false,
-        error: "La extracción no coincide con el total declarado en el PDF. No se importará ningún registro.",
+        error: "La extracción no coincide con el total declarado en el PDF.",
         detalle: `Extraídos: ${records.length}. Total declarado: ${Number.isFinite(expectedTotal) ? expectedTotal : "no detectado"}.`,
       },
       { status: 422 }
     );
   }
 
-  const validationErrors = validateRecords(records);
+  const validationErrors = validateOpposition(records);
   if (validationErrors.length > 0) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "La validación automática ha detectado registros incorrectos.",
-        detalle: validationErrors,
-      },
+      { ok: false, error: "La validación automática ha detectado registros incorrectos.", detalle: validationErrors },
       { status: 422 }
     );
   }
@@ -218,17 +304,12 @@ export async function POST(request: NextRequest) {
 
   if (deleteError) {
     return NextResponse.json(
-      {
-        ok: false,
-        error: "No se pudieron preparar los registros existentes para la reimportación.",
-        detalle: deleteError.message,
-      },
+      { ok: false, error: "No se pudieron preparar los registros existentes.", detalle: deleteError.message },
       { status: 500 }
     );
   }
 
   let imported = 0;
-
   for (let start = 0; start < records.length; start += BATCH_SIZE) {
     const batch = records.slice(start, start + BATCH_SIZE);
     const { data, error } = await supabaseAdmin
@@ -239,42 +320,17 @@ export async function POST(request: NextRequest) {
       });
 
     if (error) {
-      await supabaseAdmin
-        .from("listados")
-        .update({
-          error_procesamiento: `Importación interrumpida tras ${imported} registros: ${error.message}`,
-        })
-        .eq("id", listadoId);
-
       return NextResponse.json(
-        {
-          ok: false,
-          error: "La importación se interrumpió.",
-          detalle: error.message,
-          registros_importados: imported,
-        },
+        { ok: false, error: "La importación se interrumpió.", detalle: error.message, registros_importados: imported },
         { status: 500 }
       );
     }
-
     const result = Array.isArray(data) ? data[0] : data;
     imported += Number(result?.registros_procesados ?? batch.length);
   }
 
-  const importedAt = new Date().toISOString();
-
-  const [{ count, error: countError }] = await Promise.all([
-    supabaseAdmin
-      .from("registros_listado")
-      .select("id", { count: "exact", head: true })
-      .eq("listado_id", listadoId),
-    supabaseAdmin
-      .from("listados")
-      .update({
-        total_registros: imported,
-        error_procesamiento: null,
-      })
-      .eq("id", listadoId),
+  await Promise.all([
+    supabaseAdmin.from("listados").update({ total_registros: imported, error_procesamiento: null }).eq("id", listadoId),
     supabaseAdmin
       .from("procesos_ia")
       .update({
@@ -282,7 +338,8 @@ export async function POST(request: NextRequest) {
           ...details,
           importacion: {
             estado: "completada",
-            importado_at: importedAt,
+            tipo: "oposicion",
+            importado_at: new Date().toISOString(),
             registros_importados: imported,
           },
         },
@@ -290,22 +347,10 @@ export async function POST(request: NextRequest) {
       .eq("id", proceso.id),
   ]);
 
-  if (countError || count !== expectedTotal) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "La importación terminó, pero la comprobación final no coincide.",
-        detalle: `Esperados: ${expectedTotal}. Guardados: ${count ?? "desconocido"}.`,
-      },
-      { status: 500 }
-    );
-  }
-
   return NextResponse.json({
     ok: true,
-    listado_id: listadoId,
+    tipo_importacion: "oposicion",
     registros_importados: imported,
-    total_verificado: count,
     mensaje: `${imported} candidatos y registros importados correctamente.`,
   });
 }
