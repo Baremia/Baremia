@@ -287,9 +287,8 @@ export default function ListadosManager() {
                 <option value="" disabled>Selecciona el tipo</option>
                 <option value="provisional">Provisional</option>
                 <option value="definitivo">Definitivo</option>
-                <option value="meritos">Méritos</option>
-                <option value="admitidos">Admitidos</option>
-                <option value="excluidos">Excluidos</option>
+                <option value="correccion">Corrección</option>
+                <option value="actualizacion">Actualización</option>
                 <option value="otro">Otro</option>
               </select>
             </label>
@@ -305,7 +304,6 @@ export default function ListadosManager() {
                   <option value="pendiente">Pendiente</option>
                   <option value="procesando">Procesando</option>
                   <option value="procesado">Procesado</option>
-                  <option value="publicado">Publicado</option>
                   <option value="error">Error</option>
                 </select>
               </label>
@@ -314,7 +312,7 @@ export default function ListadosManager() {
             <label>
               Archivo PDF <span>*</span>
               <input type="file" name="archivo" accept="application/pdf,.pdf" required />
-              <small>Formato PDF. Tamaño máximo: 20 MB.</small>
+              <small>Formato PDF. Tamaño máximo: 50 MB.</small>
             </label>
 
             {error && <p className="admin-alert admin-alert-error">{error}</p>}

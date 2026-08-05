@@ -3,9 +3,12 @@ import { hasAdminSession } from "../../../../lib/admin-auth";
 import { supabaseAdmin } from "../../../../lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const BUCKET = "listados-oficiales";
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const TIPOS_VALIDOS = ["provisional", "definitivo", "correccion", "actualizacion", "otro"];
+const ESTADOS_VALIDOS = ["pendiente", "procesando", "procesado", "error"];
 
 function unauthorized() {
   return NextResponse.json(
@@ -28,9 +31,24 @@ function safeFileName(name: string) {
     .toLowerCase();
 }
 
+function mapListado(item: Record<string, unknown>) {
+  return {
+    id: item.id,
+    convocatoria_id: item.convocatoria_id,
+    tipo: item.tipo,
+    nombre_archivo: item.titulo,
+    ruta_storage: item.archivo_storage,
+    fecha_publicacion: item.fecha_publicacion,
+    estado: item.estado_procesamiento,
+    fecha_creacion: item.created_at,
+    total_registros: item.total_registros,
+    fecha_procesamiento: item.procesado_at,
+    error_procesamiento: item.error_procesamiento,
+  };
+}
+
 async function getConvocatorias() {
   const { data, error } = await supabaseAdmin
-    .schema("baremia")
     .from("convocatorias")
     .select("id,nombre,estado")
     .order("nombre", { ascending: true });
@@ -47,11 +65,13 @@ export async function GET(request: NextRequest) {
 
   if (action === "result") {
     if (!id) {
-      return NextResponse.json({ ok: false, error: "Falta el identificador." }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Falta el identificador." },
+        { status: 400 }
+      );
     }
 
     const { data: proceso, error: procesoError } = await supabaseAdmin
-      .schema("baremia")
       .from("procesos_ia")
       .select("detalles,estado")
       .eq("listado_id", id)
@@ -62,7 +82,11 @@ export async function GET(request: NextRequest) {
 
     if (procesoError) {
       return NextResponse.json(
-        { ok: false, error: "No se pudo localizar el resultado procesado." },
+        {
+          ok: false,
+          error: "No se pudo localizar el resultado procesado.",
+          detalle: procesoError.message,
+        },
         { status: 500 }
       );
     }
@@ -78,7 +102,10 @@ export async function GET(request: NextRequest) {
 
     if (!rutaProcesada) {
       return NextResponse.json(
-        { ok: false, error: "Este listado todavía no tiene un resultado disponible." },
+        {
+          ok: false,
+          error: "Este listado todavía no tiene un resultado disponible.",
+        },
         { status: 404 }
       );
     }
@@ -99,17 +126,19 @@ export async function GET(request: NextRequest) {
 
   if (action === "download") {
     if (!id) {
-      return NextResponse.json({ ok: false, error: "Falta el identificador." }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Falta el identificador." },
+        { status: 400 }
+      );
     }
 
     const { data: listado, error: listadoError } = await supabaseAdmin
-      .schema("baremia")
       .from("listados")
-      .select("id,ruta_storage")
+      .select("id,archivo_storage")
       .eq("id", id)
       .single();
 
-    if (listadoError || !listado?.ruta_storage) {
+    if (listadoError || !listado?.archivo_storage) {
       return NextResponse.json(
         { ok: false, error: "No se encontró el archivo del listado." },
         { status: 404 }
@@ -118,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin.storage
       .from(BUCKET)
-      .createSignedUrl(listado.ruta_storage, 60);
+      .createSignedUrl(listado.archivo_storage, 60);
 
     if (error || !data?.signedUrl) {
       return NextResponse.json(
@@ -130,29 +159,41 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, url: data.signedUrl });
   }
 
-  const [{ data: listados, error: listadosError }, convocatorias] = await Promise.all([
-    supabaseAdmin
-      .schema("baremia")
-      .from("listados")
-      .select(
-        "id,convocatoria_id,tipo,nombre_archivo,ruta_storage,fecha_publicacion,estado,fecha_creacion"
-      )
-      .order("fecha_creacion", { ascending: false }),
-    getConvocatorias(),
-  ]);
+  try {
+    const [{ data: listados, error: listadosError }, convocatorias] =
+      await Promise.all([
+        supabaseAdmin
+          .from("listados")
+          .select(
+            "id,convocatoria_id,titulo,tipo,fecha_publicacion,archivo_storage,estado_procesamiento,created_at,total_registros,procesado_at,error_procesamiento"
+          )
+          .order("created_at", { ascending: false }),
+        getConvocatorias(),
+      ]);
 
-  if (listadosError) {
-    console.error("Error cargando listados:", listadosError);
+    if (listadosError) throw listadosError;
+
     return NextResponse.json(
-      { ok: false, error: "No se pudieron cargar los listados.", detalle: listadosError.message },
+      {
+        ok: true,
+        listados: (listados ?? []).map((item) =>
+          mapListado(item as unknown as Record<string, unknown>)
+        ),
+        convocatorias,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "No se pudieron cargar los listados.",
+        detalle: message,
+      },
       { status: 500 }
     );
   }
-
-  return NextResponse.json(
-    { ok: true, listados: listados ?? [], convocatorias },
-    { headers: { "Cache-Control": "no-store" } }
-  );
 }
 
 export async function POST(request: NextRequest) {
@@ -162,7 +203,10 @@ export async function POST(request: NextRequest) {
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ ok: false, error: "Formulario no válido." }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "Formulario no válido." },
+      { status: 400 }
+    );
   }
 
   const convocatoriaId = cleanText(formData.get("convocatoria_id"));
@@ -173,24 +217,60 @@ export async function POST(request: NextRequest) {
 
   if (!convocatoriaId || !tipo || !(file instanceof File)) {
     return NextResponse.json(
-      { ok: false, error: "Selecciona una convocatoria, un tipo y un archivo PDF." },
+      {
+        ok: false,
+        error: "Selecciona una convocatoria, un tipo y un archivo PDF.",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (!TIPOS_VALIDOS.includes(tipo)) {
+    return NextResponse.json(
+      { ok: false, error: "El tipo de listado no es válido." },
+      { status: 400 }
+    );
+  }
+
+  if (!ESTADOS_VALIDOS.includes(estado)) {
+    return NextResponse.json(
+      { ok: false, error: "El estado de procesamiento no es válido." },
       { status: 400 }
     );
   }
 
   if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    return NextResponse.json({ ok: false, error: "El archivo debe ser un PDF." }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "El archivo debe ser un PDF." },
+      { status: 400 }
+    );
   }
 
   if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
     return NextResponse.json(
-      { ok: false, error: "El PDF debe ocupar entre 1 byte y 20 MB." },
+      { ok: false, error: "El PDF debe ocupar entre 1 byte y 50 MB." },
       { status: 400 }
     );
   }
 
   if (fechaPublicacion && !/^\d{4}-\d{2}-\d{2}$/.test(fechaPublicacion)) {
-    return NextResponse.json({ ok: false, error: "La fecha no es válida." }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "La fecha no es válida." },
+      { status: 400 }
+    );
+  }
+
+  const { data: convocatoria, error: convocatoriaError } = await supabaseAdmin
+    .from("convocatorias")
+    .select("id")
+    .eq("id", convocatoriaId)
+    .maybeSingle();
+
+  if (convocatoriaError || !convocatoria) {
+    return NextResponse.json(
+      { ok: false, error: "La convocatoria seleccionada no existe." },
+      { status: 400 }
+    );
   }
 
   const originalName = file.name || "listado.pdf";
@@ -207,39 +287,50 @@ export async function POST(request: NextRequest) {
     });
 
   if (uploadError) {
-    console.error("Error subiendo PDF:", uploadError);
     return NextResponse.json(
-      { ok: false, error: "No se pudo subir el PDF.", detalle: uploadError.message },
+      {
+        ok: false,
+        error: "No se pudo subir el PDF.",
+        detalle: uploadError.message,
+      },
       { status: 500 }
     );
   }
 
   const { data, error: insertError } = await supabaseAdmin
-    .schema("baremia")
     .from("listados")
     .insert({
       convocatoria_id: convocatoriaId,
+      titulo: originalName,
       tipo,
-      nombre_archivo: originalName,
-      ruta_storage: storagePath,
-      fecha_publicacion: fechaPublicacion,
-      estado,
+      fecha_publicacion: fechaPublicacion ?? new Date().toISOString().slice(0, 10),
+      archivo_storage: storagePath,
+      estado_procesamiento: estado,
     })
     .select(
-      "id,convocatoria_id,tipo,nombre_archivo,ruta_storage,fecha_publicacion,estado,fecha_creacion"
+      "id,convocatoria_id,titulo,tipo,fecha_publicacion,archivo_storage,estado_procesamiento,created_at,total_registros,procesado_at,error_procesamiento"
     )
     .single();
 
   if (insertError) {
     await supabaseAdmin.storage.from(BUCKET).remove([storagePath]);
-    console.error("Error registrando listado:", insertError);
     return NextResponse.json(
-      { ok: false, error: "El PDF se subió, pero no se pudo registrar el listado.", detalle: insertError.message },
+      {
+        ok: false,
+        error: "El PDF se subió, pero no se pudo registrar el listado.",
+        detalle: insertError.message,
+      },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true, listado: data }, { status: 201 });
+  return NextResponse.json(
+    {
+      ok: true,
+      listado: mapListado(data as unknown as Record<string, unknown>),
+    },
+    { status: 201 }
+  );
 }
 
 export async function DELETE(request: NextRequest) {
@@ -247,11 +338,13 @@ export async function DELETE(request: NextRequest) {
 
   const id = cleanText(request.nextUrl.searchParams.get("id"));
   if (!id) {
-    return NextResponse.json({ ok: false, error: "Falta el identificador." }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "Falta el identificador." },
+      { status: 400 }
+    );
   }
 
   const { count, error: countError } = await supabaseAdmin
-    .schema("baremia")
     .from("registros_listado")
     .select("id", { count: "exact", head: true })
     .eq("listado_id", id);
@@ -265,40 +358,45 @@ export async function DELETE(request: NextRequest) {
 
   if ((count ?? 0) > 0) {
     return NextResponse.json(
-      { ok: false, error: "No se puede eliminar porque ya tiene registros procesados." },
+      {
+        ok: false,
+        error: "No se puede eliminar porque ya tiene registros procesados.",
+      },
       { status: 409 }
     );
   }
 
   const { data: listado, error: listadoError } = await supabaseAdmin
-    .schema("baremia")
     .from("listados")
-    .select("id,ruta_storage")
+    .select("id,archivo_storage")
     .eq("id", id)
     .single();
 
   if (listadoError || !listado) {
-    return NextResponse.json({ ok: false, error: "Listado no encontrado." }, { status: 404 });
+    return NextResponse.json(
+      { ok: false, error: "Listado no encontrado." },
+      { status: 404 }
+    );
   }
 
   const { error: deleteError } = await supabaseAdmin
-    .schema("baremia")
     .from("listados")
     .delete()
     .eq("id", id);
 
   if (deleteError) {
     return NextResponse.json(
-      { ok: false, error: "No se pudo eliminar el listado.", detalle: deleteError.message },
+      {
+        ok: false,
+        error: "No se pudo eliminar el listado.",
+        detalle: deleteError.message,
+      },
       { status: 500 }
     );
   }
 
-  if (listado.ruta_storage) {
-    const { error: storageError } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .remove([listado.ruta_storage]);
-    if (storageError) console.error("No se pudo eliminar el PDF del Storage:", storageError);
+  if (listado.archivo_storage) {
+    await supabaseAdmin.storage.from(BUCKET).remove([listado.archivo_storage]);
   }
 
   return NextResponse.json({ ok: true });
