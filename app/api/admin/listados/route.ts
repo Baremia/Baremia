@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 const BUCKET = "listados-oficiales";
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const TIPOS_VALIDOS = [
-  "convocatoria",
+  "convocatoria_bases",
   "correccion_bases",
   "admitidos_excluidos",
   "resultado_oposicion",
@@ -18,7 +18,7 @@ const TIPOS_VALIDOS = [
   "bolsa_empleo",
   "relacion_final",
   "adjudicacion_nombramiento",
-  "otro",
+  "otro_documento_oficial",
 ];
 const ESTADOS_VALIDOS = ["pendiente", "procesando", "procesado", "error"];
 

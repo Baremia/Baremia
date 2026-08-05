@@ -38,15 +38,18 @@ type Proceso = {
 };
 
 function getErrorMessage(payload: unknown, fallback: string) {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "error" in payload &&
-    typeof payload.error === "string"
-  ) {
-    return payload.error;
-  }
-  return fallback;
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const error =
+    "error" in payload && typeof payload.error === "string"
+      ? payload.error
+      : fallback;
+  const detalle =
+    "detalle" in payload && typeof payload.detalle === "string"
+      ? payload.detalle.trim()
+      : "";
+
+  return detalle ? `${error} ${detalle}` : error;
 }
 
 async function readResponsePayload(response: Response) {
@@ -67,17 +70,17 @@ async function readResponsePayload(response: Response) {
 
 function tipoLabel(tipo: string) {
   const labels: Record<string, string> = {
-    convocatoria: "Convocatoria / Bases",
+    convocatoria_bases: "Convocatoria / Bases",
     correccion_bases: "Corrección de bases",
     admitidos_excluidos: "Admitidos y excluidos",
     resultado_oposicion: "Resultado de oposición",
     baremo_meritos: "Baremo de méritos",
     meritos_provisionales: "Méritos provisionales",
     meritos_definitivos: "Méritos definitivos",
-    bolsa_empleo: "Bolsa de empleo",
+    bolsa_empleo: "Bolsa de empleo / referencia estadística",
     relacion_final: "Relación final",
     adjudicacion_nombramiento: "Adjudicación / nombramiento",
-    otro: "Otro documento oficial",
+    otro_documento_oficial: "Otro documento oficial",
   };
   return labels[tipo] ?? tipo;
 }
@@ -456,7 +459,7 @@ export default function ListadosManager() {
               Tipo de documento <span>*</span>
               <select name="tipo" required defaultValue="">
                 <option value="" disabled>Selecciona el tipo</option>
-                <option value="convocatoria">Convocatoria / Bases</option>
+                <option value="convocatoria_bases">Convocatoria / Bases</option>
                 <option value="correccion_bases">Corrección de bases</option>
                 <option value="admitidos_excluidos">Admitidos y excluidos</option>
                 <option value="resultado_oposicion">Resultado de oposición</option>
@@ -466,7 +469,7 @@ export default function ListadosManager() {
                 <option value="bolsa_empleo">Bolsa de empleo</option>
                 <option value="relacion_final">Relación final</option>
                 <option value="adjudicacion_nombramiento">Adjudicación / nombramiento</option>
-                <option value="otro">Otro documento oficial</option>
+                <option value="otro_documento_oficial">Otro documento oficial</option>
               </select>
             </label>
 
