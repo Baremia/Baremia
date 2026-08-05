@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       tipo: "extraccion",
       estado: "ejecutando",
       progreso: 5,
-      modelo_ia: "baremia-parser-v1",
+      modelo_ia: "baremia-parser-v2",
       inicio_at: now,
       detalles: { fase: "descarga", archivo: listado.titulo },
     })
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
     const processedPath = `procesados/${listado.convocatoria_id}/${listado.id}.json`;
     const payload = JSON.stringify(
       {
-        version: "baremia-parser-v1",
+        version: "baremia-parser-v2",
         listado_id: listado.id,
         convocatoria_id: listado.convocatoria_id,
         nombre_archivo: listado.titulo,
@@ -219,6 +219,8 @@ export async function POST(request: NextRequest) {
           requiere_ocr: false,
           formato: parsed.formato,
           confianza: parsed.confianza,
+          total_esperado: parsed.total_esperado,
+          total_coincide: parsed.total_coincide,
           registros_extraidos: parsed.registros.length,
           duplicados_descartados: parsed.duplicados_descartados,
           avisos: parsed.avisos,
@@ -243,6 +245,8 @@ export async function POST(request: NextRequest) {
         lineas: extracted.lines,
         formato: parsed.formato,
         confianza: parsed.confianza,
+        total_esperado: parsed.total_esperado,
+        total_coincide: parsed.total_coincide,
         registros_extraidos: parsed.registros.length,
         duplicados_descartados: parsed.duplicados_descartados,
         ruta_procesada: processedPath,

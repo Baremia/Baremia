@@ -15,9 +15,14 @@ export type RegistroExtraido = {
 };
 
 export type ResultadoParseoListado = {
-  formato: "madrid_oposicion_doble_columna" | "madrid_bolsa_alfabetica" | "desconocido";
+  formato:
+    | "madrid_oposicion_doble_columna"
+    | "madrid_bolsa_alfabetica"
+    | "desconocido";
   confianza: number;
   registros: RegistroExtraido[];
+  total_esperado: number | null;
+  total_coincide: boolean | null;
   lineas_analizadas: number;
   lineas_con_registro: number;
   duplicados_descartados: number;
@@ -56,7 +61,6 @@ function parseOposicionLine(
   lineNumber: number,
   orderStart: number
 ): RegistroExtraido[] {
-  // Una línea puede contener dos aspirantes porque el PDF oficial usa dos columnas.
   const record = new RegExp(
     `(?:^|\\s)(\\d{5,7})\\s+(${MASKED_DNI})\\s+(.+?)\\s+(?:(S|SI|SÍ)\\s+)?(${NUMBER})(?=\\s+\\d{5,7}\\s+${MASKED_DNI}|\\s*$)`,
     "giu"
@@ -137,6 +141,11 @@ function parseBolsaLine(
   };
 }
 
+function expectedTotal(text: string): number | null {
+  const match = text.match(/TOTAL\s+(?:DE\s+)?APROBADOS\s*:\s*(\d{1,7})/i);
+  return match ? Number(match[1]) : null;
+}
+
 export function parseListadoText(text: string): ResultadoParseoListado {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "");
   const lines = normalized.split("\n");
@@ -154,19 +163,46 @@ export function parseListadoText(text: string): ResultadoParseoListado {
     const line = raw.replace(/\f/g, " ").trimEnd();
     if (!line.trim()) continue;
 
-    const oppositionRecords = parseOposicionLine(
+    let oppositionRecords = parseOposicionLine(
       line,
       currentPage,
       index + 1,
       oposicion.length + 1
     );
+
+    // Algunos nombres largos saltan de línea en el PDF. Solo usamos esta
+    // recuperación cuando la línea individual no produjo ningún registro.
+    if (oppositionRecords.length === 0) {
+      for (let windowSize = 2; windowSize <= 3; windowSize += 1) {
+        const combined = lines
+          .slice(index, index + windowSize)
+          .map((value) => value.replace(/\f/g, " ").trim())
+          .filter(Boolean)
+          .join(" ");
+
+        oppositionRecords = parseOposicionLine(
+          combined,
+          currentPage,
+          index + 1,
+          oposicion.length + 1
+        );
+
+        if (oppositionRecords.length > 0) break;
+      }
+    }
+
     if (oppositionRecords.length > 0) {
       oposicion.push(...oppositionRecords);
       linesWithRecords += 1;
       continue;
     }
 
-    const bolsaRecord = parseBolsaLine(line, currentPage, index + 1, bolsa.length + 1);
+    const bolsaRecord = parseBolsaLine(
+      line,
+      currentPage,
+      index + 1,
+      bolsa.length + 1
+    );
     if (bolsaRecord) {
       bolsa.push(bolsaRecord);
       linesWithRecords += 1;
@@ -194,6 +230,10 @@ export function parseListadoText(text: string): ResultadoParseoListado {
         ? "madrid_bolsa_alfabetica"
         : "desconocido";
 
+  const totalExpected = expectedTotal(normalized);
+  const totalMatches =
+    totalExpected === null ? null : totalExpected === deduplicated.length;
+
   const confidence =
     deduplicated.length === 0
       ? 0
@@ -203,14 +243,25 @@ export function parseListadoText(text: string): ResultadoParseoListado {
   if (deduplicated.length === 0) {
     warnings.push("No se reconoció ningún registro con los formatos configurados.");
   } else if (deduplicated.length < 10) {
-    warnings.push("Se extrajeron muy pocos registros; conviene revisar el resultado antes de importarlo.");
+    warnings.push(
+      "Se extrajeron muy pocos registros; conviene revisar el resultado antes de importarlo."
+    );
   }
-  if (duplicates > 0) warnings.push(`Se descartaron ${duplicates} registros duplicados.`);
+  if (duplicates > 0) {
+    warnings.push(`Se descartaron ${duplicates} registros duplicados.`);
+  }
+  if (totalMatches === false) {
+    warnings.push(
+      `El PDF declara ${totalExpected} aprobados, pero se extrajeron ${deduplicated.length}. La importación quedará bloqueada.`
+    );
+  }
 
   return {
     formato: format,
     confianza: Number(confidence.toFixed(3)),
     registros: deduplicated,
+    total_esperado: totalExpected,
+    total_coincide: totalMatches,
     lineas_analizadas: lines.length,
     lineas_con_registro: linesWithRecords,
     duplicados_descartados: duplicates,

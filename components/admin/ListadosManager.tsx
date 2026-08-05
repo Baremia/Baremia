@@ -17,6 +17,9 @@ type Listado = {
   fecha_publicacion: string | null;
   estado: string;
   fecha_creacion: string | null;
+  total_registros: number | null;
+  fecha_procesamiento: string | null;
+  error_procesamiento: string | null;
 };
 
 type Proceso = {
@@ -72,6 +75,7 @@ export default function ListadosManager() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [openingResultId, setOpeningResultId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [importingId, setImportingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -219,13 +223,55 @@ export default function ListadosManager() {
       if (!response.ok) throw new Error(getErrorMessage(payload, "No se pudo procesar el listado."));
 
       const paginas = payload.resultado?.paginas ?? 0;
-      const lineas = payload.resultado?.lineas ?? 0;
-      setMessage(`PDF procesado: ${paginas} páginas y ${lineas} líneas extraídas.`);
+      const extraidos = payload.resultado?.registros_extraidos ?? 0;
+      const esperados = payload.resultado?.total_esperado;
+      const validacion =
+        typeof esperados === "number"
+          ? ` Registros: ${extraidos}/${esperados}.`
+          : ` Registros extraídos: ${extraidos}.`;
+      setMessage(`PDF procesado: ${paginas} páginas.${validacion}`);
     } catch (processingError) {
       setError(processingError instanceof Error ? processingError.message : "No se pudo procesar el listado.");
     } finally {
       setProcessingId(null);
       await loadData(false);
+    }
+  }
+
+  async function importListado(item: Listado) {
+    const existing = item.total_registros ?? 0;
+    const question = existing > 0
+      ? `Este listado ya tiene ${existing} registros. ¿Validar y reimportar “${item.nombre_archivo}”?`
+      : `¿Validar e importar los candidatos de “${item.nombre_archivo}”?`;
+
+    if (!window.confirm(question)) return;
+
+    setImportingId(item.id);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin/importar-listado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listado_id: item.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const detail = Array.isArray(payload.detalle)
+          ? payload.detalle.join(" ")
+          : typeof payload.detalle === "string"
+            ? ` ${payload.detalle}`
+            : "";
+        throw new Error(`${getErrorMessage(payload, "No se pudo importar el listado.")}${detail}`);
+      }
+
+      setMessage(payload.mensaje ?? `${payload.registros_importados ?? 0} registros importados.`);
+      await loadData(false);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "No se pudo importar el listado.");
+    } finally {
+      setImportingId(null);
     }
   }
 
@@ -365,6 +411,7 @@ export default function ListadosManager() {
                         <div><dt>Tipo</dt><dd>{item.tipo}</dd></div>
                         <div><dt>Fecha oficial</dt><dd>{formatDate(item.fecha_publicacion)}</dd></div>
                         <div><dt>Subido</dt><dd>{formatDate(item.fecha_creacion)}</dd></div>
+                        <div><dt>Importados</dt><dd>{item.total_registros ?? 0}</dd></div>
                       </dl>
 
                       {active && (
@@ -411,6 +458,21 @@ export default function ListadosManager() {
                           disabled={openingResultId === item.id}
                         >
                           {openingResultId === item.id ? "Abriendo…" : "Ver resultado"}
+                        </button>
+                      )}
+
+                      {completed && (
+                        <button
+                          className="button button-primary"
+                          type="button"
+                          onClick={() => void importListado(item)}
+                          disabled={importingId === item.id || active}
+                        >
+                          {importingId === item.id
+                            ? "Importando…"
+                            : (item.total_registros ?? 0) > 0
+                              ? `Reimportar ${item.total_registros} registros`
+                              : "Validar e importar"}
                         </button>
                       )}
 
