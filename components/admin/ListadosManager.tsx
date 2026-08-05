@@ -20,6 +20,11 @@ type Listado = {
   total_registros: number | null;
   fecha_procesamiento: string | null;
   error_procesamiento: string | null;
+  fecha_corte: string | null;
+  fuente_url: string | null;
+  hash_archivo: string | null;
+  estado_revision: string | null;
+  funcion_calculo: string | null;
 };
 
 type Proceso = {
@@ -44,6 +49,39 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
+async function readResponsePayload(response: Response) {
+  const text = await response.text();
+
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const cleaned = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    return {
+      ok: false,
+      error: cleaned || `El servidor respondió con HTTP ${response.status}.`,
+    };
+  }
+}
+
+function tipoLabel(tipo: string) {
+  const labels: Record<string, string> = {
+    convocatoria: "Convocatoria / Bases",
+    correccion_bases: "Corrección de bases",
+    admitidos_excluidos: "Admitidos y excluidos",
+    resultado_oposicion: "Resultado de oposición",
+    baremo_meritos: "Baremo de méritos",
+    meritos_provisionales: "Méritos provisionales",
+    meritos_definitivos: "Méritos definitivos",
+    bolsa_empleo: "Bolsa de empleo",
+    relacion_final: "Relación final",
+    adjudicacion_nombramiento: "Adjudicación / nombramiento",
+    otro: "Otro documento oficial",
+  };
+  return labels[tipo] ?? tipo;
+}
+
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
   const date = new Date(value.length === 10 ? `${value}T12:00:00` : value);
@@ -63,6 +101,14 @@ function statusLabel(status: string) {
     error: "Error",
   };
   return labels[status] ?? status;
+}
+
+async function sha256File(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export default function ListadosManager() {
@@ -91,8 +137,8 @@ export default function ListadosManager() {
       ]);
 
       const [listadosPayload, procesosPayload] = await Promise.all([
-        listadosResponse.json(),
-        procesosResponse.json(),
+        readResponsePayload(listadosResponse),
+        readResponsePayload(procesosResponse),
       ]);
 
       if (!listadosResponse.ok) {
@@ -164,17 +210,96 @@ export default function ListadosManager() {
 
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const file = formData.get("archivo");
+
+    if (!(file instanceof File) || file.size <= 0) {
+      setError("Selecciona un archivo PDF.");
+      setSaving(false);
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError("El PDF supera el tamaño máximo de 50 MB.");
+      setSaving(false);
+      return;
+    }
+
+    setMessage("Comprobando el documento…");
+    const fileHash = await sha256File(file);
+
+    const metadata = {
+      convocatoria_id: String(formData.get("convocatoria_id") ?? ""),
+      tipo: String(formData.get("tipo") ?? ""),
+      estado: String(formData.get("estado") ?? "pendiente"),
+      fecha_publicacion: String(formData.get("fecha_publicacion") ?? ""),
+      nombre_archivo: file.name,
+      tamano_archivo: file.size,
+      mime_type: file.type || "application/pdf",
+      hash_archivo: fileHash,
+      fecha_corte: String(formData.get("fecha_corte") ?? ""),
+      fuente_url: String(formData.get("fuente_url") ?? ""),
+      funcion_calculo: String(formData.get("funcion_calculo") ?? ""),
+    };
 
     try {
-      const response = await fetch("/api/admin/listados", { method: "POST", body: formData });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(getErrorMessage(payload, "No se pudo guardar el listado."));
+      setMessage("Preparando subida directa…");
+
+      const prepareResponse = await fetch("/api/admin/listados", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prepare_upload", ...metadata }),
+      });
+      const preparePayload = await readResponsePayload(prepareResponse);
+
+      if (!prepareResponse.ok || !preparePayload.upload?.signed_url) {
+        throw new Error(
+          getErrorMessage(preparePayload, "No se pudo preparar la subida del PDF.")
+        );
+      }
+
+      setMessage("Subiendo PDF directamente a Supabase…");
+
+      const uploadResponse = await fetch(preparePayload.upload.signed_url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/pdf",
+          "Cache-Control": "3600",
+        },
+        body: file,
+      });
+
+      if (!uploadResponse.ok) {
+        const uploadPayload = await readResponsePayload(uploadResponse);
+        throw new Error(
+          getErrorMessage(uploadPayload, `La subida directa falló con HTTP ${uploadResponse.status}.`)
+        );
+      }
+
+      setMessage("Registrando documento…");
+
+      const registerResponse = await fetch("/api/admin/listados", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "register_upload",
+          ...metadata,
+          ruta_storage: preparePayload.upload.path,
+        }),
+      });
+      const registerPayload = await readResponsePayload(registerResponse);
+
+      if (!registerResponse.ok) {
+        throw new Error(
+          getErrorMessage(registerPayload, "El PDF se subió, pero no se pudo registrar.")
+        );
+      }
 
       form.reset();
-      setMessage("Listado subido y registrado correctamente.");
+      setMessage("Documento subido y registrado correctamente.");
       await loadData(false);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el listado.");
+      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar el documento.");
+      setMessage("");
     } finally {
       setSaving(false);
     }
@@ -189,7 +314,7 @@ export default function ListadosManager() {
         `/api/admin/listados?action=${action}&id=${encodeURIComponent(item.id)}`,
         { cache: "no-store" }
       );
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
       if (!response.ok || !payload.url) {
         throw new Error(
           getErrorMessage(
@@ -219,7 +344,7 @@ export default function ListadosManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listado_id: item.id }),
       });
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
       if (!response.ok) throw new Error(getErrorMessage(payload, "No se pudo procesar el listado."));
 
       const paginas = payload.resultado?.paginas ?? 0;
@@ -256,7 +381,7 @@ export default function ListadosManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listado_id: item.id }),
       });
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
       if (!response.ok) {
         const detail = Array.isArray(payload.detalle)
           ? payload.detalle.join(" ")
@@ -285,7 +410,7 @@ export default function ListadosManager() {
       const response = await fetch(`/api/admin/listados?id=${encodeURIComponent(item.id)}`, {
         method: "DELETE",
       });
-      const payload = await response.json();
+      const payload = await readResponsePayload(response);
       if (!response.ok) throw new Error(getErrorMessage(payload, "No se pudo eliminar el listado."));
       setMessage("Listado eliminado.");
       await loadData(false);
@@ -301,8 +426,8 @@ export default function ListadosManager() {
       <header className="admin-page-header">
         <div>
           <p className="admin-eyebrow">DOCUMENTOS</p>
-          <h1>Listados oficiales</h1>
-          <p>Sube los PDF oficiales y controla su estado de procesamiento.</p>
+          <h1>Documentos oficiales</h1>
+          <p>Sube bases, convocatorias y listados oficiales, y controla su procesamiento.</p>
         </div>
         <span className="admin-live-badge">{listados.length} registrados</span>
       </header>
@@ -311,7 +436,7 @@ export default function ListadosManager() {
         <article className="admin-panel-card admin-form-card">
           <div className="admin-panel-heading">
             <p className="admin-eyebrow">NUEVO</p>
-            <h2>Subir listado</h2>
+            <h2>Subir documento</h2>
           </div>
 
           <form className="admin-data-form" onSubmit={submit}>
@@ -328,14 +453,20 @@ export default function ListadosManager() {
             </label>
 
             <label>
-              Tipo de listado <span>*</span>
+              Tipo de documento <span>*</span>
               <select name="tipo" required defaultValue="">
                 <option value="" disabled>Selecciona el tipo</option>
-                <option value="provisional">Provisional</option>
-                <option value="definitivo">Definitivo</option>
-                <option value="correccion">Corrección</option>
-                <option value="actualizacion">Actualización</option>
-                <option value="otro">Otro</option>
+                <option value="convocatoria">Convocatoria / Bases</option>
+                <option value="correccion_bases">Corrección de bases</option>
+                <option value="admitidos_excluidos">Admitidos y excluidos</option>
+                <option value="resultado_oposicion">Resultado de oposición</option>
+                <option value="baremo_meritos">Baremo de méritos</option>
+                <option value="meritos_provisionales">Méritos provisionales</option>
+                <option value="meritos_definitivos">Méritos definitivos</option>
+                <option value="bolsa_empleo">Bolsa de empleo</option>
+                <option value="relacion_final">Relación final</option>
+                <option value="adjudicacion_nombramiento">Adjudicación / nombramiento</option>
+                <option value="otro">Otro documento oficial</option>
               </select>
             </label>
 
@@ -355,6 +486,30 @@ export default function ListadosManager() {
               </label>
             </div>
 
+            <div className="admin-form-row">
+              <label>
+                Fecha de corte de datos
+                <input type="date" name="fecha_corte" />
+              </label>
+              <label>
+                Función en el cálculo
+                <select name="funcion_calculo" defaultValue="">
+                  <option value="">Solo archivo documental</option>
+                  <option value="reglas">Define reglas de baremación</option>
+                  <option value="candidatos">Aporta candidatos</option>
+                  <option value="oposicion">Aporta puntuación de oposición</option>
+                  <option value="meritos">Aporta méritos</option>
+                  <option value="resultado_final">Aporta resultado final</option>
+                  <option value="referencia_estadistica">Referencia estadística</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              URL de la fuente oficial
+              <input type="url" name="fuente_url" placeholder="https://…" />
+            </label>
+
             <label>
               Archivo PDF <span>*</span>
               <input type="file" name="archivo" accept="application/pdf,.pdf" required />
@@ -366,7 +521,7 @@ export default function ListadosManager() {
 
             <div className="admin-form-actions">
               <button className="button button-primary" type="submit" disabled={saving || convocatorias.length === 0}>
-                {saving ? "Subiendo…" : "Subir listado"}
+                {saving ? "Subiendo…" : "Subir documento"}
               </button>
             </div>
           </form>
@@ -376,7 +531,7 @@ export default function ListadosManager() {
           <div className="admin-list-toolbar">
             <div>
               <p className="admin-eyebrow">REGISTRO</p>
-              <h2>Listados existentes</h2>
+              <h2>Documentos existentes</h2>
             </div>
             <input
               className="admin-search-input"
@@ -398,6 +553,14 @@ export default function ListadosManager() {
                 const active = process?.estado === "pendiente" || process?.estado === "ejecutando";
                 const completed = item.estado === "procesado" || item.estado === "publicado" || process?.estado === "completado";
                 const shownStatus = active ? process.estado : process?.estado === "error" ? "error" : item.estado;
+                const supportsCandidateParsing = [
+                  "resultado_oposicion",
+                  "baremo_meritos",
+                  "meritos_provisionales",
+                  "meritos_definitivos",
+                  "bolsa_empleo",
+                  "relacion_final",
+                ].includes(item.tipo);
 
                 return (
                   <article key={item.id} className="admin-record-card">
@@ -408,7 +571,7 @@ export default function ListadosManager() {
                       </div>
                       <p>{convocatoriaNames.get(item.convocatoria_id) ?? "Convocatoria no disponible"}</p>
                       <dl>
-                        <div><dt>Tipo</dt><dd>{item.tipo}</dd></div>
+                        <div><dt>Tipo</dt><dd>{tipoLabel(item.tipo)}</dd></div>
                         <div><dt>Fecha oficial</dt><dd>{formatDate(item.fecha_publicacion)}</dd></div>
                         <div><dt>Subido</dt><dd>{formatDate(item.fecha_creacion)}</dd></div>
                         <div><dt>Importados</dt><dd>{item.total_registros ?? 0}</dd></div>
@@ -436,20 +599,26 @@ export default function ListadosManager() {
                     </div>
 
                     <div className="admin-record-actions">
-                      <button
-                        className="button button-primary"
-                        type="button"
-                        onClick={() => void processListado(item)}
-                        disabled={processingId === item.id || active}
-                      >
-                        {processingId === item.id || active
-                          ? "Procesando…"
-                          : completed
-                            ? "Reprocesar PDF"
-                            : process?.estado === "error"
-                              ? "Reintentar"
-                              : "Procesar PDF"}
-                      </button>
+                      {supportsCandidateParsing ? (
+                        <button
+                          className="button button-primary"
+                          type="button"
+                          onClick={() => void processListado(item)}
+                          disabled={processingId === item.id || active}
+                        >
+                          {processingId === item.id || active
+                            ? "Procesando…"
+                            : completed
+                              ? "Reprocesar PDF"
+                              : process?.estado === "error"
+                                ? "Reintentar"
+                                : "Procesar PDF"}
+                        </button>
+                      ) : (
+                        <small style={{ color: "#64748b", lineHeight: 1.45 }}>
+                          Documento guardado como fuente normativa. No importa candidatos.
+                        </small>
+                      )}
 
                       {completed && (
                         <button
@@ -461,7 +630,7 @@ export default function ListadosManager() {
                         </button>
                       )}
 
-                      {completed && (
+                      {completed && supportsCandidateParsing && (
                         <button
                           className="button button-primary"
                           type="button"
