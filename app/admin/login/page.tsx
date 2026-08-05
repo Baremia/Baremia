@@ -2,10 +2,34 @@
 
 import Image from "next/image";
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+
+type LoginResponse = {
+  ok?: boolean;
+  error?: string;
+  redirectTo?: string;
+};
+
+async function readResponse(response: Response): Promise<LoginResponse> {
+  const text = await response.text();
+
+  if (!text) {
+    return {
+      ok: false,
+      error: "El servidor devolvió una respuesta vacía",
+    };
+  }
+
+  try {
+    return JSON.parse(text) as LoginResponse;
+  } catch {
+    return {
+      ok: false,
+      error: text.slice(0, 300) || "El servidor devolvió una respuesta no válida",
+    };
+  }
+}
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,24 +45,24 @@ export default function AdminLoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
+        cache: "no-store",
         body: JSON.stringify({ password }),
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
       if (!response.ok || !data.ok) {
         throw new Error(data.error || "No se pudo iniciar sesión");
       }
 
-      router.replace("/admin");
-      router.refresh();
+      window.location.assign(data.redirectTo || "/admin");
     } catch (loginError) {
       setError(
         loginError instanceof Error
           ? loginError.message
           : "No se pudo iniciar sesión"
       );
-    } finally {
       setLoading(false);
     }
   }
@@ -75,7 +99,11 @@ export default function AdminLoginPage() {
 
           {error && <p className="admin-form-error">{error}</p>}
 
-          <button type="submit" className="button button-primary" disabled={loading}>
+          <button
+            type="submit"
+            className="button button-primary"
+            disabled={loading}
+          >
             {loading ? "Accediendo..." : "Entrar al panel"}
           </button>
         </form>

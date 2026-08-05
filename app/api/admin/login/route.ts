@@ -11,7 +11,20 @@ type LoginBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as LoginBody;
+    let body: LoginBody;
+
+    try {
+      body = (await request.json()) as LoginBody;
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "La solicitud no contiene un JSON válido",
+        },
+        { status: 400 }
+      );
+    }
+
     const password = body.password?.trim() ?? "";
 
     if (!password || !isValidAdminPassword(password)) {
@@ -24,7 +37,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json(
+      {
+        ok: true,
+        redirectTo: "/admin",
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
 
     response.cookies.set({
       name: ADMIN_COOKIE_NAME,
