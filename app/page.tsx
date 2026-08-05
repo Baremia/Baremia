@@ -7,7 +7,7 @@ import {
 } from "react";
 
 const CONVOCATORIA_ID =
-  "58ef068a-2176-4466-b959-fe678334e13c";
+  "15b496e6-f85e-403e-9270-0f3fb4d43bfc";
 
 type Candidato = {
   candidato_id: string;
