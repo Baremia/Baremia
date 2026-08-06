@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   const { data: listado, error: listadoError } = await supabaseAdmin
     .from("listados")
-    .select("id,convocatoria_id,titulo,archivo_storage")
+    .select("id,convocatoria_id,titulo,tipo,archivo_storage")
     .eq("id", listadoId)
     .single();
 
@@ -89,6 +89,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { ok: false, error: "Listado o archivo PDF no encontrado." },
       { status: 404 }
+    );
+  }
+
+  if (listado.tipo === "baremo_meritos" || listado.tipo === "bolsa_empleo") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Este documento debe procesarse con /api/admin/procesar-lote para evitar cargar el PDF completo.",
+      },
+      { status: 409 }
     );
   }
 

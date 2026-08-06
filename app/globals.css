@@ -320,10 +320,39 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 .admin-record-actions button:hover { border-color: #94a3b8; background: #f8fafc; }
 .admin-record-actions button.danger { border-color: #fecaca; color: #b91c1c; }
 .admin-record-actions button.danger:hover { background: #fef2f2; }
+.admin-source-note { max-width: 190px; color: #64748b; font-size: 12px; line-height: 1.45; }
+.admin-batch-progress { margin-top: 16px; padding: 14px; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; }
+.admin-progress-heading { display: flex; justify-content: space-between; gap: 12px; color: #1e3a8a; font-size: 13px; }
+.admin-batch-progress progress { width: 100%; height: 9px; margin-top: 8px; accent-color: var(--blue); }
+.admin-record-main .admin-batch-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.admin-record-main .admin-batch-metrics > div { padding: 9px; border-radius: 9px; background: rgba(255,255,255,.78); }
+.admin-modal-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  padding: 24px; background: rgba(15, 23, 42, .58); backdrop-filter: blur(3px);
+}
+.admin-sample-modal {
+  width: min(1180px, 100%); max-height: min(820px, calc(100vh - 48px)); overflow: auto;
+  padding: 26px; border-radius: 18px; background: #fff; box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+}
+.admin-sample-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.admin-sample-header h2 { margin: 7px 0; font-size: 24px; }
+.admin-sample-header > div > p:last-child { color: var(--muted); font-size: 14px; }
+.admin-sample-header > button { padding: 9px 13px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font-weight: 700; }
+.admin-sample-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 22px 0; }
+.admin-sample-summary > div { padding: 13px; border: 1px solid var(--line); border-radius: 11px; background: #f8fafc; }
+.admin-sample-summary span { display: block; min-height: 30px; color: #64748b; font-size: 11px; font-weight: 750; line-height: 1.35; text-transform: uppercase; }
+.admin-sample-summary strong { display: block; margin-top: 7px; color: #1e293b; font-size: 15px; }
+.admin-sample-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.admin-sample-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+.admin-sample-table th, .admin-sample-table td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+.admin-sample-table th { position: sticky; top: 0; background: #f1f5f9; color: #475569; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.admin-sample-table tbody tr:last-child td { border-bottom: 0; }
+.admin-sample-table td:nth-child(3) { min-width: 240px; white-space: normal; }
 
 @media (max-width: 1100px) {
   .admin-crud-grid { grid-template-columns: 1fr; }
   .admin-form-card { position: static; }
+  .admin-sample-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) {
   .admin-form-row { grid-template-columns: 1fr; }
@@ -332,4 +361,11 @@ button:disabled { cursor: not-allowed; opacity: .62; }
   .admin-record-title-row { display: grid; }
   .admin-state-pill { justify-self: start; }
   .admin-record-actions { flex-direction: row; justify-content: flex-start; }
+  .admin-source-note { flex-basis: 100%; max-width: none; }
+  .admin-record-main .admin-batch-metrics { grid-template-columns: 1fr; }
+  .admin-modal-backdrop { padding: 0; }
+  .admin-sample-modal { max-height: 100vh; min-height: 100vh; padding: 20px 16px; border-radius: 0; }
+  .admin-sample-header { display: grid; }
+  .admin-sample-header > button { justify-self: start; }
+  .admin-sample-summary { grid-template-columns: 1fr; }
 }

@@ -110,12 +110,23 @@ export async function POST(request: NextRequest) {
 
   const { data: listado, error: listadoError } = await supabaseAdmin
     .from("listados")
-    .select("id,convocatoria_id,titulo,estado_procesamiento")
+    .select("id,convocatoria_id,titulo,tipo,estado_procesamiento")
     .eq("id", listadoId)
     .single();
 
   if (listadoError || !listado) {
     return NextResponse.json({ ok: false, error: "El listado no existe." }, { status: 404 });
+  }
+
+  if (listado.tipo === "baremo_meritos" || listado.tipo === "bolsa_empleo") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Esta fuente de méritos se procesa por lotes y no se puede importar como candidatos.",
+      },
+      { status: 409 }
+    );
   }
 
   const { data: proceso, error: procesoError } = await supabaseAdmin

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import MeritSampleModal, { type MeritSample } from "./MeritSampleModal";
 
 type Convocatoria = {
   id: string;
@@ -32,9 +33,18 @@ type Proceso = {
   listado_id: string;
   estado: string;
   progreso: number | null;
+  modelo_ia: string | null;
   inicio_at: string | null;
   fin_at: string | null;
   error: string | null;
+  pagina_inicio: number | null;
+  pagina_fin: number | null;
+  pagina_actual: number | null;
+  total_paginas: number | null;
+  total_registros: number | null;
+  lotes_completados: number | null;
+  ultimo_error: string | null;
+  reanudable: boolean | null;
 };
 
 function getErrorMessage(payload: unknown, fallback: string) {
@@ -106,6 +116,10 @@ function statusLabel(status: string) {
   return labels[status] ?? status;
 }
 
+function isMeritReference(item: Listado) {
+  return item.tipo === "baremo_meritos" || item.tipo === "bolsa_empleo";
+}
+
 async function sha256File(file: File) {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -124,14 +138,19 @@ export default function ListadosManager() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [openingResultId, setOpeningResultId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processingSeveralId, setProcessingSeveralId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null);
+  const [meritSample, setMeritSample] = useState<MeritSample | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const loadData = useCallback(async (showLoader = true) => {
-    if (showLoader) setLoading(true);
-    setError("");
+    if (showLoader) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const [listadosResponse, procesosResponse] = await Promise.all([
@@ -166,7 +185,9 @@ export default function ListadosManager() {
   }, [loadData]);
 
   const hasActiveProcesses = useMemo(
-    () => procesos.some((item) => item.estado === "pendiente" || item.estado === "ejecutando"),
+    () => procesos.some(
+      (item) => item.estado === "ejecutando" || (!item.reanudable && item.estado === "pendiente")
+    ),
     [procesos]
   );
 
@@ -180,6 +201,16 @@ export default function ListadosManager() {
     const map = new Map<string, Proceso>();
     for (const process of procesos) {
       if (!map.has(process.listado_id)) map.set(process.listado_id, process);
+    }
+    return map;
+  }, [procesos]);
+
+  const meritProcessByListado = useMemo(() => {
+    const map = new Map<string, Proceso>();
+    for (const process of procesos) {
+      if (process.reanudable && !map.has(process.listado_id)) {
+        map.set(process.listado_id, process);
+      }
     }
     return map;
   }, [procesos]);
@@ -363,6 +394,128 @@ export default function ListadosManager() {
     } finally {
       setProcessingId(null);
       await loadData(false);
+    }
+  }
+
+  async function processMeritBatches(item: Listado, requestedBatches: number) {
+    if (
+      requestedBatches === 1 &&
+      !window.confirm(`¿Procesar el siguiente lote de 30 páginas de “${item.nombre_archivo}”?`)
+    ) {
+      return;
+    }
+
+    setProcessingId(item.id);
+    setProcessingSeveralId(requestedBatches > 1 ? item.id : null);
+    setError("");
+    setMessage("");
+
+    let executedBatches = 0;
+    let lastCurrentPage = 0;
+    let lastTotalPages = 0;
+    let completed = false;
+
+    try {
+      for (let batch = 0; batch < requestedBatches; batch += 1) {
+        const response = await fetch("/api/admin/procesar-lote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listado_id: item.id }),
+        });
+        const payload = await readResponsePayload(response);
+
+        if (!response.ok) {
+          throw new Error(
+            getErrorMessage(payload, "No se pudo procesar el siguiente lote.")
+          );
+        }
+
+        executedBatches += payload.ya_completado ? 0 : 1;
+        lastCurrentPage = payload.progreso?.pagina_actual ?? lastCurrentPage;
+        lastTotalPages = payload.progreso?.total_paginas ?? lastTotalPages;
+        completed = payload.completado === true;
+        await loadData(false);
+
+        if (completed) break;
+      }
+
+      if (completed && executedBatches === 0) {
+        setMessage("El documento ya estaba procesado por completo.");
+      } else {
+        const batchLabel = executedBatches === 1 ? "lote" : "lotes";
+        const progressLabel = lastTotalPages > 0
+          ? ` Página ${lastCurrentPage} de ${lastTotalPages}.`
+          : "";
+        setMessage(
+          `${executedBatches} ${batchLabel} procesados correctamente.${progressLabel}${completed ? " Proceso completado." : ""}`
+        );
+      }
+    } catch (processingError) {
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : "No se pudo procesar el lote."
+      );
+      setMessage("");
+    } finally {
+      setProcessingId(null);
+      setProcessingSeveralId(null);
+      await loadData(false);
+    }
+  }
+
+  function processSeveralMeritBatches(item: Listado) {
+    const answer = window.prompt(
+      "¿Cuántos lotes quieres procesar de forma secuencial? Introduce un número entre 2 y 10.",
+      "3"
+    );
+    if (answer === null) return;
+
+    const batches = Number(answer);
+    if (!Number.isInteger(batches) || batches < 2 || batches > 10) {
+      setError("El número de lotes debe ser un entero entre 2 y 10.");
+      return;
+    }
+
+    void processMeritBatches(item, batches);
+  }
+
+  async function openMeritSample(item: Listado) {
+    setSampleLoadingId(item.id);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `/api/admin/fuentes-meritos?listado_id=${encodeURIComponent(item.id)}&limit=20`,
+        { cache: "no-store" }
+      );
+      const payload = await readResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(payload, "No se pudo cargar la muestra de méritos.")
+        );
+      }
+
+      setMeritSample({
+        listadoId: item.id,
+        title: item.nombre_archivo,
+        records: Array.isArray(payload.registros) ? payload.registros : [],
+        summary: payload.resumen ?? {
+          total: 0,
+          formacion: { minima: null, maxima: null, media: null },
+          experiencia: { minima: null, maxima: null, media: null },
+          puntuacion_total: { minima: null, maxima: null, media: null },
+          filas_con_advertencias: 0,
+        },
+      });
+    } catch (sampleError) {
+      setError(
+        sampleError instanceof Error
+          ? sampleError.message
+          : "No se pudo cargar la muestra de méritos."
+      );
+    } finally {
+      setSampleLoadingId(null);
     }
   }
 
@@ -552,18 +705,30 @@ export default function ListadosManager() {
           ) : (
             <div className="admin-record-list">
               {filteredListados.map((item) => {
-                const process = latestProcessByListado.get(item.id);
-                const active = process?.estado === "pendiente" || process?.estado === "ejecutando";
-                const completed = item.estado === "procesado" || item.estado === "publicado" || process?.estado === "completado";
+                const meritReference = isMeritReference(item);
+                const process = meritReference
+                  ? meritProcessByListado.get(item.id)
+                  : latestProcessByListado.get(item.id);
+                const active = process?.estado === "ejecutando" ||
+                  (!meritReference && process?.estado === "pendiente");
+                const completed = meritReference
+                  ? process?.estado === "completado"
+                  : item.estado === "procesado" || item.estado === "publicado" || process?.estado === "completado";
                 const shownStatus = active ? process.estado : process?.estado === "error" ? "error" : item.estado;
                 const supportsCandidateParsing = [
                   "resultado_oposicion",
-                  "baremo_meritos",
                   "meritos_provisionales",
                   "meritos_definitivos",
-                  "bolsa_empleo",
                   "relacion_final",
                 ].includes(item.tipo);
+                const currentPage = Math.max(0, process?.pagina_actual ?? 0);
+                const totalPages = Math.max(0, process?.total_paginas ?? 0);
+                const batchProgress = totalPages > 0
+                  ? Math.max(0, Math.min(100, Math.round((currentPage / totalPages) * 100)))
+                  : 0;
+                const extractedRecords = process?.total_registros ?? item.total_registros ?? 0;
+                const lastError = process?.ultimo_error ?? process?.error ?? item.error_procesamiento;
+                const locallyProcessing = processingId === item.id;
 
                 return (
                   <article key={item.id} className="admin-record-card">
@@ -577,10 +742,35 @@ export default function ListadosManager() {
                         <div><dt>Tipo</dt><dd>{tipoLabel(item.tipo)}</dd></div>
                         <div><dt>Fecha oficial</dt><dd>{formatDate(item.fecha_publicacion)}</dd></div>
                         <div><dt>Subido</dt><dd>{formatDate(item.fecha_creacion)}</dd></div>
-                        <div><dt>Importados</dt><dd>{item.total_registros ?? 0}</dd></div>
+                        <div>
+                          <dt>{meritReference ? "Extraídos" : "Importados"}</dt>
+                          <dd>{meritReference ? extractedRecords : item.total_registros ?? 0}</dd>
+                        </div>
                       </dl>
 
-                      {active && (
+                      {meritReference && (
+                        <section className="admin-batch-progress" aria-label="Progreso por lotes">
+                          <div className="admin-progress-heading">
+                            <span>Páginas {currentPage} / {totalPages || "por detectar"}</span>
+                            <strong>{batchProgress}%</strong>
+                          </div>
+                          <progress value={batchProgress} max={100} />
+                          <dl className="admin-batch-metrics">
+                            <div><dt>Registros extraídos</dt><dd>{extractedRecords}</dd></div>
+                            <div><dt>Lotes completados</dt><dd>{process?.lotes_completados ?? 0}</dd></div>
+                            <div>
+                              <dt>Último lote</dt>
+                              <dd>
+                                {process?.pagina_inicio && process?.pagina_fin
+                                  ? `Pág. ${process.pagina_inicio}–${process.pagina_fin}`
+                                  : "—"}
+                              </dd>
+                            </div>
+                          </dl>
+                        </section>
+                      )}
+
+                      {!meritReference && active && (
                         <div style={{ marginTop: 12 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
                             <span>Procesando PDF</span>
@@ -594,15 +784,51 @@ export default function ListadosManager() {
                         </div>
                       )}
 
-                      {process?.estado === "error" && process.error && (
+                      {lastError && (process?.estado === "error" || item.estado === "error") && (
                         <p className="admin-alert admin-alert-error" style={{ marginTop: 12 }}>
-                          {process.error}
+                          {lastError}
                         </p>
                       )}
                     </div>
 
                     <div className="admin-record-actions">
-                      {supportsCandidateParsing ? (
+                      {meritReference ? (
+                        <>
+                          <button
+                            className="button button-primary"
+                            type="button"
+                            onClick={() => void processMeritBatches(item, 1)}
+                            disabled={locallyProcessing || active || completed}
+                          >
+                            {locallyProcessing && processingSeveralId !== item.id
+                              ? "Procesando lote…"
+                              : process?.estado === "error"
+                                ? "Continuar"
+                                : completed
+                                  ? "Procesamiento completo"
+                                  : "Procesar siguiente lote"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => processSeveralMeritBatches(item)}
+                            disabled={locallyProcessing || active || completed}
+                          >
+                            {processingSeveralId === item.id
+                              ? "Procesando en secuencia…"
+                              : "Procesar varios lotes"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openMeritSample(item)}
+                            disabled={sampleLoadingId === item.id || extractedRecords === 0}
+                          >
+                            {sampleLoadingId === item.id ? "Cargando muestra…" : "Ver muestra"}
+                          </button>
+                          <small className="admin-source-note">
+                            Referencia estadística de méritos. No importa personas en candidatos.
+                          </small>
+                        </>
+                      ) : supportsCandidateParsing ? (
                         <button
                           className="button button-primary"
                           type="button"
@@ -623,7 +849,7 @@ export default function ListadosManager() {
                         </small>
                       )}
 
-                      {completed && (
+                      {!meritReference && completed && (
                         <button
                           type="button"
                           onClick={() => void openUrl("result", item)}
@@ -633,7 +859,7 @@ export default function ListadosManager() {
                         </button>
                       )}
 
-                      {completed && supportsCandidateParsing && (
+                      {!meritReference && completed && supportsCandidateParsing && (
                         <button
                           className="button button-primary"
                           type="button"
@@ -660,7 +886,7 @@ export default function ListadosManager() {
                         className="danger"
                         type="button"
                         onClick={() => void remove(item)}
-                        disabled={deletingId === item.id || active}
+                        disabled={deletingId === item.id || active || locallyProcessing}
                       >
                         {deletingId === item.id ? "Eliminando…" : "Eliminar"}
                       </button>
@@ -672,6 +898,13 @@ export default function ListadosManager() {
           )}
         </article>
       </section>
+
+      {meritSample ? (
+        <MeritSampleModal
+          sample={meritSample}
+          onClose={() => setMeritSample(null)}
+        />
+      ) : null}
     </div>
   );
 }
