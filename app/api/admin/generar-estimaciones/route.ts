@@ -20,33 +20,65 @@ function clean(value: unknown) {
 export async function GET() {
   if (!(await hasAdminSession())) return unauthorized();
 
-  const [{ data: convocatorias, error: convocatoriasError }, { count, error: countError }] =
-    await Promise.all([
-      supabaseAdmin
-        .from("convocatorias")
-        .select("id,nombre,estado")
-        .order("nombre", { ascending: true }),
-      supabaseAdmin
-        .from("estimaciones")
-        .select("id", { count: "exact", head: true })
-        .eq("metodologia_version", "madrid-enfermeria-v1"),
-    ]);
+  const [
+    { data: convocatorias, error: convocatoriasError },
+    { count: estimacionesCount, error: estimacionesError },
+    { count: crucesCount, error: crucesError },
+    { count: candidatosCount, error: candidatosError },
+    { count: fuentesCount, error: fuentesError },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from("convocatorias")
+      .select("id,nombre,estado")
+      .order("nombre", { ascending: true }),
+    supabaseAdmin
+      .from("estimaciones")
+      .select("id", { count: "exact", head: true })
+      .eq("metodologia_version", "madrid-enfermeria-v1"),
+    supabaseAdmin
+      .from("cruces_fuentes_meritos")
+      .select("id", { count: "exact", head: true }),
+    supabaseAdmin
+      .from("candidatos")
+      .select("id", { count: "exact", head: true }),
+    supabaseAdmin
+      .from("fuentes_meritos")
+      .select("id", { count: "exact", head: true }),
+  ]);
 
-  if (convocatoriasError || countError) {
+  const error =
+    convocatoriasError ??
+    estimacionesError ??
+    crucesError ??
+    candidatosError ??
+    fuentesError;
+
+  if (error) {
     return NextResponse.json(
       {
         ok: false,
         error: "No se pudo cargar el estado del motor.",
-        detalle: convocatoriasError?.message ?? countError?.message,
+        detalle: error.message,
       },
       { status: 500 }
     );
   }
 
+  const candidatos = candidatosCount ?? 0;
+  const cruces = crucesCount ?? 0;
+  const cobertura = candidatos > 0 ? Number(((cruces / candidatos) * 100).toFixed(2)) : 0;
+
   return NextResponse.json({
     ok: true,
     convocatorias: convocatorias ?? [],
-    estimaciones_v1: count ?? 0,
+    estimaciones_v1: estimacionesCount ?? 0,
+    cobertura: {
+      candidatos,
+      fuentes_meritos: fuentesCount ?? 0,
+      coincidencias_directas: cruces,
+      sin_coincidencia: Math.max(candidatos - cruces, 0),
+      porcentaje: cobertura,
+    },
   });
 }
 
