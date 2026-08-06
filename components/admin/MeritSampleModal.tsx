@@ -33,10 +33,20 @@ export type MeritSample = {
     puntuacion_total: ScoreSummary;
     filas_con_advertencias: number;
   };
+  pagination: {
+    offset: number;
+    limit: number;
+    from: number;
+    to: number;
+    hasPrevious: boolean;
+    hasNext: boolean;
+  };
 };
 
 type MeritSampleModalProps = {
   sample: MeritSample;
+  loading: boolean;
+  onNavigate: (offset: number) => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -55,6 +65,8 @@ function rowWarningCount(record: MeritSampleRecord) {
 
 export default function MeritSampleModal({
   sample,
+  loading,
+  onNavigate,
   onClose,
 }: MeritSampleModalProps) {
   useEffect(() => {
@@ -64,6 +76,20 @@ export default function MeritSampleModal({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
+
+  const { offset, limit, from, to, hasPrevious, hasNext } = sample.pagination;
+  const total = sample.summary.total;
+  const lastOffset = total > 0 ? Math.floor((total - 1) / limit) * limit : 0;
+
+  function openRandomSample() {
+    if (total <= limit) {
+      void onNavigate(0);
+      return;
+    }
+    const pages = Math.ceil(total / limit);
+    const randomPage = Math.floor(Math.random() * pages);
+    void onNavigate(randomPage * limit);
+  }
 
   return (
     <div className="admin-modal-backdrop" role="presentation">
@@ -75,9 +101,12 @@ export default function MeritSampleModal({
       >
         <header className="admin-sample-header">
           <div>
-            <p className="admin-eyebrow">MUESTRA EXTRAÍDA</p>
+            <p className="admin-eyebrow">REVISIÓN DE DATOS EXTRAÍDOS</p>
             <h2 id="merit-sample-title">{sample.title}</h2>
-            <p>Primeros {sample.records.length} registros ordenados por página y fila.</p>
+            <p>
+              Registros {from || 0}–{to || 0} de {total}. Puedes recorrer todo el
+              documento o abrir una muestra aleatoria.
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Cerrar muestra" autoFocus>
             Cerrar
@@ -85,7 +114,7 @@ export default function MeritSampleModal({
         </header>
 
         <div className="admin-sample-summary">
-          <div><span>Total</span><strong>{sample.summary.total}</strong></div>
+          <div><span>Total</span><strong>{total}</strong></div>
           <div>
             <span>Formación · mín / media / máx</span>
             <strong>
@@ -110,7 +139,38 @@ export default function MeritSampleModal({
           </div>
         </div>
 
-        <div className="admin-sample-table-wrap">
+        <nav className="admin-sample-pagination" aria-label="Navegación de la muestra">
+          <button type="button" onClick={() => void onNavigate(0)} disabled={loading || !hasPrevious}>
+            Inicio
+          </button>
+          <button
+            type="button"
+            onClick={() => void onNavigate(Math.max(0, offset - limit))}
+            disabled={loading || !hasPrevious}
+          >
+            Anterior
+          </button>
+          <span>{loading ? "Cargando…" : `${from || 0}–${to || 0} de ${total}`}</span>
+          <button
+            type="button"
+            onClick={() => void onNavigate(offset + limit)}
+            disabled={loading || !hasNext}
+          >
+            Siguiente
+          </button>
+          <button
+            type="button"
+            onClick={() => void onNavigate(lastOffset)}
+            disabled={loading || !hasNext}
+          >
+            Final
+          </button>
+          <button type="button" onClick={openRandomSample} disabled={loading || total === 0}>
+            Muestra aleatoria
+          </button>
+        </nav>
+
+        <div className="admin-sample-table-wrap" aria-busy={loading}>
           <table className="admin-sample-table">
             <thead>
               <tr>

@@ -18,13 +18,18 @@ export async function GET(request: NextRequest) {
 
     const listadoId = request.nextUrl.searchParams.get("listado_id")?.trim() ?? "";
     const rawLimit = request.nextUrl.searchParams.get("limit") ?? "20";
+    const rawOffset = request.nextUrl.searchParams.get("offset") ?? "0";
     const limit = Number(rawLimit);
+    const offset = Number(rawOffset);
 
     if (!isUuid(listadoId)) {
       return jsonError("El identificador del listado no es un UUID válido.", 400);
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       return jsonError("El límite debe ser un entero entre 1 y 100.", 400);
+    }
+    if (!Number.isInteger(offset) || offset < 0 || offset > 1_000_000) {
+      return jsonError("El desplazamiento debe ser un entero válido.", 400);
     }
 
     const [recordsResult, summaryResult] = await Promise.all([
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
         .eq("listado_id", listadoId)
         .order("numero_pagina", { ascending: true })
         .order("numero_fila", { ascending: true })
-        .limit(limit),
+        .range(offset, offset + limit - 1),
       supabaseAdmin
         .from("fuentes_meritos_resumen")
         .select(
@@ -62,13 +67,17 @@ export async function GET(request: NextRequest) {
     }
 
     const summary = summaryResult.data;
+    const total = numeric(summary?.total) ?? 0;
+    const records = recordsResult.data ?? [];
+    const from = records.length > 0 ? offset + 1 : 0;
+    const to = records.length > 0 ? offset + records.length : 0;
 
     return NextResponse.json(
       {
         ok: true,
-        registros: recordsResult.data ?? [],
+        registros: records,
         resumen: {
-          total: numeric(summary?.total) ?? 0,
+          total,
           formacion: {
             minima: numeric(summary?.formacion_minima),
             maxima: numeric(summary?.formacion_maxima),
@@ -86,6 +95,14 @@ export async function GET(request: NextRequest) {
           },
           filas_con_advertencias:
             numeric(summary?.filas_con_advertencias) ?? 0,
+        },
+        paginacion: {
+          offset,
+          limit,
+          from,
+          to,
+          hasPrevious: offset > 0,
+          hasNext: to < total,
         },
       },
       { headers: { "Cache-Control": "no-store" } }

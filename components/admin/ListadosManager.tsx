@@ -464,29 +464,108 @@ export default function ListadosManager() {
     }
   }
 
-  function processSeveralMeritBatches(item: Listado) {
-    const answer = window.prompt(
-      "¿Cuántos lotes quieres procesar de forma secuencial? Introduce un número entre 2 y 10.",
-      "3"
-    );
-    if (answer === null) return;
+  async function processAllRemainingMeritBatches(item: Listado) {
+    const currentProcess = meritProcessByListado.get(item.id);
+    const currentPage = Math.max(0, currentProcess?.pagina_actual ?? 0);
+    const totalPages = Math.max(0, currentProcess?.total_paginas ?? 0);
+    const remainingPages = totalPages > 0 ? Math.max(0, totalPages - currentPage) : null;
+    const estimatedBatches = remainingPages === null
+      ? "todos los lotes pendientes"
+      : `${Math.ceil(remainingPages / 30)} lotes pendientes`;
 
-    const batches = Number(answer);
-    if (!Number.isInteger(batches) || batches < 2 || batches > 10) {
-      setError("El número de lotes debe ser un entero entre 2 y 10.");
+    if (
+      !window.confirm(
+        `Se procesarán ${estimatedBatches} de “${item.nombre_archivo}” de forma secuencial. Mantén esta pestaña abierta hasta terminar. ¿Continuar?`
+      )
+    ) {
       return;
     }
 
-    void processMeritBatches(item, batches);
+    setProcessingId(item.id);
+    setProcessingSeveralId(item.id);
+    setError("");
+    setMessage("Iniciando procesamiento completo…");
+
+    let executedBatches = 0;
+    let previousPage = currentPage;
+    let lastCurrentPage = currentPage;
+    let lastTotalPages = totalPages;
+    let completed = false;
+    const safetyLimit = totalPages > 0
+      ? Math.max(1, Math.ceil(Math.max(0, totalPages - currentPage) / 30) + 1)
+      : 50;
+
+    try {
+      for (let batch = 0; batch < safetyLimit; batch += 1) {
+        const response = await fetch("/api/admin/procesar-lote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listado_id: item.id }),
+        });
+        const payload = await readResponsePayload(response);
+
+        if (!response.ok) {
+          throw new Error(
+            getErrorMessage(payload, "No se pudo procesar el siguiente lote.")
+          );
+        }
+
+        lastCurrentPage = payload.progreso?.pagina_actual ?? lastCurrentPage;
+        lastTotalPages = payload.progreso?.total_paginas ?? lastTotalPages;
+        completed = payload.completado === true || payload.ya_completado === true;
+
+        if (!payload.ya_completado) executedBatches += 1;
+
+        if (!completed && lastCurrentPage <= previousPage) {
+          throw new Error(
+            "El procesamiento no avanzó de página. Se ha detenido para evitar un bucle."
+          );
+        }
+
+        previousPage = lastCurrentPage;
+        setMessage(
+          lastTotalPages > 0
+            ? `Procesando… página ${lastCurrentPage} de ${lastTotalPages} (${executedBatches} lotes en esta ejecución).`
+            : `Procesando… ${executedBatches} lotes completados.`
+        );
+        await loadData(false);
+
+        if (completed) break;
+      }
+
+      if (!completed) {
+        throw new Error(
+          "Se alcanzó el límite de seguridad sin completar el documento. Puedes continuar desde el último lote guardado."
+        );
+      }
+
+      setMessage(
+        `Procesamiento completo. ${executedBatches} lotes ejecutados en esta sesión. Página ${lastCurrentPage} de ${lastTotalPages}.`
+      );
+    } catch (processingError) {
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : "No se pudo completar el procesamiento por lotes."
+      );
+    } finally {
+      setProcessingId(null);
+      setProcessingSeveralId(null);
+      await loadData(false);
+    }
   }
 
-  async function openMeritSample(item: Listado) {
-    setSampleLoadingId(item.id);
+  async function loadMeritSample(
+    listadoId: string,
+    title: string,
+    offset = 0
+  ) {
+    setSampleLoadingId(listadoId);
     setError("");
 
     try {
       const response = await fetch(
-        `/api/admin/fuentes-meritos?listado_id=${encodeURIComponent(item.id)}&limit=20`,
+        `/api/admin/fuentes-meritos?listado_id=${encodeURIComponent(listadoId)}&limit=20&offset=${offset}`,
         { cache: "no-store" }
       );
       const payload = await readResponsePayload(response);
@@ -497,8 +576,8 @@ export default function ListadosManager() {
       }
 
       setMeritSample({
-        listadoId: item.id,
-        title: item.nombre_archivo,
+        listadoId,
+        title,
         records: Array.isArray(payload.registros) ? payload.registros : [],
         summary: payload.resumen ?? {
           total: 0,
@@ -506,6 +585,14 @@ export default function ListadosManager() {
           experiencia: { minima: null, maxima: null, media: null },
           puntuacion_total: { minima: null, maxima: null, media: null },
           filas_con_advertencias: 0,
+        },
+        pagination: payload.paginacion ?? {
+          offset: 0,
+          limit: 20,
+          from: 0,
+          to: 0,
+          hasPrevious: false,
+          hasNext: false,
         },
       });
     } catch (sampleError) {
@@ -517,6 +604,10 @@ export default function ListadosManager() {
     } finally {
       setSampleLoadingId(null);
     }
+  }
+
+  async function openMeritSample(item: Listado) {
+    await loadMeritSample(item.id, item.nombre_archivo, 0);
   }
 
   async function importListado(item: Listado) {
@@ -810,12 +901,12 @@ export default function ListadosManager() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => processSeveralMeritBatches(item)}
+                            onClick={() => void processAllRemainingMeritBatches(item)}
                             disabled={locallyProcessing || active || completed}
                           >
                             {processingSeveralId === item.id
                               ? "Procesando en secuencia…"
-                              : "Procesar varios lotes"}
+                              : "Procesar hasta completar"}
                           </button>
                           <button
                             type="button"
@@ -902,6 +993,10 @@ export default function ListadosManager() {
       {meritSample ? (
         <MeritSampleModal
           sample={meritSample}
+          loading={sampleLoadingId === meritSample.listadoId}
+          onNavigate={(offset) =>
+            loadMeritSample(meritSample.listadoId, meritSample.title, offset)
+          }
           onClose={() => setMeritSample(null)}
         />
       ) : null}
