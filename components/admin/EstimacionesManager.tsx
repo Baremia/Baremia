@@ -8,18 +8,42 @@ type Convocatoria = {
   estado: string | null;
 };
 
+type Cobertura = {
+  candidatos: number;
+  fuentes_meritos: number;
+  coincidencias_directas: number;
+  sin_coincidencia: number;
+  porcentaje: number;
+};
+
 type StatusPayload = {
   ok?: boolean;
   convocatorias?: Convocatoria[];
   estimaciones_v1?: number;
+  cobertura?: Cobertura;
   error?: string;
   detalle?: string;
 };
+
+async function readPayload(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as StatusPayload & Record<string, unknown>;
+  } catch {
+    return {
+      ok: false,
+      error: `El servidor respondió con HTTP ${response.status}.`,
+      detalle: text.slice(0, 300),
+    };
+  }
+}
 
 export default function EstimacionesManager() {
   const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
   const [convocatoriaId, setConvocatoriaId] = useState("");
   const [total, setTotal] = useState(0);
+  const [coverage, setCoverage] = useState<Cobertura | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState("");
@@ -32,13 +56,14 @@ export default function EstimacionesManager() {
       const response = await fetch("/api/admin/generar-estimaciones", {
         cache: "no-store",
       });
-      const payload = (await response.json()) as StatusPayload;
+      const payload = await readPayload(response);
       if (!response.ok || !payload.ok) {
         throw new Error(payload.detalle || payload.error || "No se pudo cargar el motor.");
       }
       const items = payload.convocatorias ?? [];
       setConvocatorias(items);
       setTotal(payload.estimaciones_v1 ?? 0);
+      setCoverage(payload.cobertura ?? null);
       if (!convocatoriaId && items.length > 0) {
         const madrid = items.find((item) =>
           item.nombre.toLocaleLowerCase("es").includes("enfermería")
@@ -58,7 +83,11 @@ export default function EstimacionesManager() {
 
   async function generate() {
     if (!convocatoriaId) return;
-    if (!window.confirm("¿Generar o recalcular todas las estimaciones v1 de esta convocatoria?")) {
+    if (
+      !window.confirm(
+        "¿Generar o recalcular las 8.321 estimaciones? Se conservarán solo las coincidencias nominales únicas y el resto se imputará estadísticamente."
+      )
+    ) {
       return;
     }
 
@@ -71,11 +100,22 @@ export default function EstimacionesManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ convocatoria_id: convocatoriaId }),
       });
-      const payload = await response.json();
+      const payload = await readPayload(response);
       if (!response.ok || !payload.ok) {
         throw new Error(payload.detalle || payload.error || "No se pudieron generar las estimaciones.");
       }
-      setMessage(payload.mensaje || "Estimaciones generadas correctamente.");
+      const result = payload.resultado as
+        | {
+            estimaciones_generadas?: number;
+            coincidencias_directas?: number;
+            meritos_imputados?: number;
+          }
+        | undefined;
+      setMessage(
+        typeof payload.mensaje === "string"
+          ? payload.mensaje
+          : `${result?.estimaciones_generadas ?? 0} estimaciones generadas.`
+      );
       await load();
     } catch (generationError) {
       setError(
@@ -98,6 +138,29 @@ export default function EstimacionesManager() {
         </div>
         <span className="admin-live-badge">{total} generadas</span>
       </header>
+
+      <section className="admin-stats-grid" style={{ marginBottom: 24 }}>
+        <article className="admin-stat-card">
+          <span>Candidatos OPE</span>
+          <strong>{coverage?.candidatos ?? 0}</strong>
+          <small>aprobados importados</small>
+        </article>
+        <article className="admin-stat-card">
+          <span>Fuente de méritos</span>
+          <strong>{coverage?.fuentes_meritos ?? 0}</strong>
+          <small>registros de bolsa</small>
+        </article>
+        <article className="admin-stat-card">
+          <span>Cruces directos</span>
+          <strong>{coverage?.coincidencias_directas ?? 0}</strong>
+          <small>{coverage?.porcentaje ?? 0}% de cobertura</small>
+        </article>
+        <article className="admin-stat-card">
+          <span>Sin cruce directo</span>
+          <strong>{coverage?.sin_coincidencia ?? 0}</strong>
+          <small>se estimarán por banda</small>
+        </article>
+      </section>
 
       <section className="admin-panel-card admin-form-card" style={{ maxWidth: 760 }}>
         <div className="admin-panel-heading">
@@ -125,9 +188,10 @@ export default function EstimacionesManager() {
           <div className="admin-info-box">
             <strong>Modelo Madrid Enfermería v1</strong>
             <p>
-              Usa la nota oficial de oposición. Cuando encuentra una coincidencia inequívoca en la bolsa,
-              adapta sus méritos al baremo de 50 puntos. Para el resto utiliza la mediana de candidatos con
-              una nota de oposición similar y amplía el intervalo de incertidumbre.
+              Las coincidencias directas solo se aceptan cuando el nombre normalizado es único tanto
+              entre los aprobados como en la bolsa. Los casos ambiguos o ausentes no se fuerzan: se
+              estiman con la mediana de méritos de candidatos con una nota de oposición similar y un
+              intervalo de incertidumbre más amplio.
             </p>
           </div>
 
@@ -138,7 +202,7 @@ export default function EstimacionesManager() {
             className="admin-primary-button"
             type="button"
             onClick={generate}
-            disabled={!convocatoriaId || loading || generating}
+            disabled={!convocatoriaId || loading || generating || !coverage?.coincidencias_directas}
           >
             {generating ? "Calculando…" : "Generar o recalcular estimaciones"}
           </button>
