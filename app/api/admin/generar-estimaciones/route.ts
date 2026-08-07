@@ -29,6 +29,7 @@ export async function GET() {
     { count: aproximadosCount, error: aproximadosError },
     { count: candidatosCount, error: candidatosError },
     { count: fuentesCount, error: fuentesError },
+    { data: baremoData, error: baremoError },
   ] = await Promise.all([
     supabaseAdmin
       .from("convocatorias")
@@ -56,6 +57,16 @@ export async function GET() {
       .from("fuentes_meritos")
       .select("id", { count: "exact", head: true })
       .eq("convocatoria_id", MADRID_ENFERMERIA_ID),
+    supabaseAdmin
+      .from("baremos_convocatoria")
+      .select(
+        "version,estado,fecha_publicacion,fuente_url,max_oposicion,max_concurso,max_experiencia,max_formacion_otras,reglas,correcciones"
+      )
+      .eq("convocatoria_id", MADRID_ENFERMERIA_ID)
+      .eq("estado", "vigente")
+      .order("fecha_publicacion", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const error =
@@ -64,7 +75,8 @@ export async function GET() {
     exactosError ??
     aproximadosError ??
     candidatosError ??
-    fuentesError;
+    fuentesError ??
+    baremoError;
 
   if (error) {
     return NextResponse.json(
@@ -87,6 +99,7 @@ export async function GET() {
     ok: true,
     convocatorias: convocatorias ?? [],
     estimaciones_v1: estimacionesCount ?? 0,
+    baremo_oficial: baremoData ?? null,
     cobertura: {
       candidatos,
       fuentes_meritos: fuentesCount ?? 0,
