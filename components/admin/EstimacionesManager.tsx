@@ -19,11 +19,25 @@ type Cobertura = {
   cruce_version: number;
 };
 
+type BaremoOficial = {
+  version: string;
+  estado: string;
+  fecha_publicacion: string | null;
+  fuente_url: string | null;
+  max_oposicion: number | string;
+  max_concurso: number | string;
+  max_experiencia: number | string;
+  max_formacion_otras: number | string;
+  reglas?: Record<string, unknown> | null;
+  correcciones?: Array<Record<string, unknown>> | null;
+};
+
 type StatusPayload = {
   ok?: boolean;
   convocatorias?: Convocatoria[];
   estimaciones_v1?: number;
   cobertura?: Cobertura;
+  baremo_oficial?: BaremoOficial | null;
   error?: string;
   detalle?: string;
 };
@@ -42,11 +56,18 @@ async function readPayload(response: Response) {
   }
 }
 
+function formatNumber(value: number | string | undefined) {
+  if (value === undefined) return "0";
+  const number = Number(value);
+  return Number.isFinite(number) ? new Intl.NumberFormat("es-ES").format(number) : String(value);
+}
+
 export default function EstimacionesManager() {
   const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
   const [convocatoriaId, setConvocatoriaId] = useState("");
   const [total, setTotal] = useState(0);
   const [coverage, setCoverage] = useState<Cobertura | null>(null);
+  const [baremo, setBaremo] = useState<BaremoOficial | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState("");
@@ -67,6 +88,7 @@ export default function EstimacionesManager() {
       setConvocatorias(items);
       setTotal(payload.estimaciones_v1 ?? 0);
       setCoverage(payload.cobertura ?? null);
+      setBaremo(payload.baremo_oficial ?? null);
       if (!convocatoriaId && items.length > 0) {
         const madrid = items.find((item) =>
           item.nombre.toLocaleLowerCase("es").includes("enfermería")
@@ -164,6 +186,63 @@ export default function EstimacionesManager() {
           <small>sin cruce suficientemente seguro</small>
         </article>
       </section>
+
+      {baremo && (
+        <section className="admin-panel-card" style={{ marginBottom: 24 }}>
+          <div className="admin-panel-heading">
+            <p className="admin-eyebrow">BAREMO OFICIAL</p>
+            <h2>Reglas vigentes de la convocatoria</h2>
+            <p>
+              Publicado {baremo.fecha_publicacion ?? "—"} · versión {baremo.version}
+            </p>
+          </div>
+
+          <section className="admin-stats-grid" style={{ marginTop: 18 }}>
+            <article className="admin-stat-card">
+              <span>Fase de oposición</span>
+              <strong>{formatNumber(baremo.max_oposicion)}</strong>
+              <small>puntos máximos</small>
+            </article>
+            <article className="admin-stat-card">
+              <span>Fase de concurso</span>
+              <strong>{formatNumber(baremo.max_concurso)}</strong>
+              <small>puntos máximos</small>
+            </article>
+            <article className="admin-stat-card">
+              <span>Experiencia</span>
+              <strong>{formatNumber(baremo.max_experiencia)}</strong>
+              <small>máximo dentro del concurso</small>
+            </article>
+            <article className="admin-stat-card">
+              <span>Formación y otras</span>
+              <strong>{formatNumber(baremo.max_formacion_otras)}</strong>
+              <small>máximo dentro del concurso</small>
+            </article>
+          </section>
+
+          <div className="admin-info-box" style={{ marginTop: 18 }}>
+            <strong>Regla principal de experiencia</strong>
+            <p>
+              La misma categoría de Enfermería en centros sanitarios públicos del SNS se valora a
+              0,006 puntos por día, hasta un máximo de 35 puntos. El baremo distingue además otros
+              tipos de Administración y centros privados con coeficientes distintos.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              La corrección publicada el 26/08/2025 afecta al apartado de docencia 2.2.d. La bolsa
+              histórica sigue siendo una referencia estadística: sus 80 puntos de experiencia y 20 de
+              formación no equivalen directamente a los 35 + 15 de esta OPE.
+            </p>
+          </div>
+
+          {baremo.fuente_url && (
+            <p style={{ marginBottom: 0, marginTop: 14 }}>
+              <a href={baremo.fuente_url} target="_blank" rel="noreferrer">
+                Abrir publicación oficial del baremo
+              </a>
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="admin-panel-card admin-form-card" style={{ maxWidth: 760 }}>
         <div className="admin-panel-heading">
