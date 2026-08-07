@@ -7,6 +7,7 @@ const OFFICIAL_SOURCE_URL =
 const SATSE_MIRROR_URL =
   "https://madrid.satse.es/documents/37411/4695298/rrhh_ope_enfermeroa_2022_09_29_listado_concurso_alfabetico_cPBjpF.pdf/89d63249-7b72-d4c7-6f0f-fc86d9f1083b?t=1691090985215";
 const READ_SOURCES = [OFFICIAL_SOURCE_URL, SATSE_MIRROR_URL] as const;
+const STORAGE_BUCKET = "listados-oficiales";
 const EXPECTED_RECORDS = 19_136;
 const BATCH_SIZE = 30;
 const UPSERT_SIZE = 500;
@@ -33,6 +34,7 @@ type HistoricalListado = {
   titulo: string;
   tipo: string;
   fuente_url: string | null;
+  archivo_storage: string | null;
 };
 
 export type HistoricalExternalResult = {
@@ -86,18 +88,54 @@ function processIsFresh(process: HistoricalProcess) {
   return Number.isFinite(time) && time > Date.now() - STALE_MS;
 }
 
-async function extractHistoricalBatch(startPage: number, endPage: number) {
+async function createStorageReadUrl(listado: HistoricalListado) {
+  if (!listado.archivo_storage) return null;
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(listado.archivo_storage, 10 * 60);
+
+  if (error || !data?.signedUrl) {
+    throw new HistoricalExternalError(
+      `No se pudo generar una URL temporal para el histórico guardado: ${error?.message ?? "respuesta vacía"}`,
+      500
+    );
+  }
+
+  return data.signedUrl;
+}
+
+async function extractHistoricalBatch(
+  startPage: number,
+  endPage: number,
+  storageUrl: string | null
+) {
   const errors: string[] = [];
+  const sources: Array<{ url: string; kind: string; label: string }> = [];
+
+  if (storageUrl) {
+    sources.push({
+      url: storageUrl,
+      kind: "storage_baremia",
+      label: "Storage Baremia",
+    });
+  }
 
   for (const sourceUrl of READ_SOURCES) {
+    sources.push({
+      url: sourceUrl,
+      kind: sourceUrl === OFFICIAL_SOURCE_URL ? "comunidad_madrid" : "satse_espejo",
+      label: sourceUrl === OFFICIAL_SOURCE_URL ? "fuente oficial" : "espejo SATSE",
+    });
+  }
+
+  for (const source of sources) {
     try {
-      const extracted = await extractPdfPageBatch(sourceUrl, startPage, endPage);
-      return { extracted, sourceUrl };
+      const extracted = await extractPdfPageBatch(source.url, startPage, endPage);
+      return { extracted, sourceKind: source.kind };
     } catch (error) {
       errors.push(
-        `${sourceUrl === OFFICIAL_SOURCE_URL ? "fuente oficial" : "espejo SATSE"}: ${
-          error instanceof Error ? error.message : "error desconocido"
-        }`
+        `${source.label}: ${error instanceof Error ? error.message : "error desconocido"}`
       );
     }
   }
@@ -111,7 +149,7 @@ async function extractHistoricalBatch(startPage: number, endPage: number) {
 async function loadListado(listadoId: string): Promise<HistoricalListado> {
   const { data, error } = await supabaseAdmin
     .from("listados")
-    .select("id,convocatoria_id,titulo,tipo,fuente_url")
+    .select("id,convocatoria_id,titulo,tipo,fuente_url,archivo_storage")
     .eq("id", listadoId)
     .maybeSingle();
 
@@ -178,6 +216,7 @@ async function claimProcess(listado: HistoricalListado) {
           ...object(existing.detalles),
           fase: "preparacion_lote_historico",
           lote_solicitado_at: now,
+          archivo_storage: listado.archivo_storage,
         },
       })
       .eq("id", existing.id)
@@ -213,6 +252,7 @@ async function claimProcess(listado: HistoricalListado) {
         documento: listado.titulo,
         fuente_oficial: OFFICIAL_SOURCE_URL,
         espejo_lectura: SATSE_MIRROR_URL,
+        archivo_storage: listado.archivo_storage,
         registros_identificables_esperados: EXPECTED_RECORDS,
       },
     })
@@ -337,7 +377,12 @@ export async function processNextHistoricalExternalBatch(
       .update({ estado_procesamiento: "procesando", error_procesamiento: null })
       .eq("id", listado.id);
 
-    const { extracted, sourceUrl } = await extractHistoricalBatch(startPage, requestedEnd);
+    const storageUrl = await createStorageReadUrl(listado);
+    const { extracted, sourceKind } = await extractHistoricalBatch(
+      startPage,
+      requestedEnd,
+      storageUrl
+    );
     detectedTotalPages = extracted.totalPages;
     lastPage = extracted.pages.at(-1)?.pageNumber ?? startPage;
 
@@ -394,8 +439,7 @@ export async function processNextHistoricalExternalBatch(
           ...object(process.detalles),
           fase: completed ? "completado" : "lote_completado",
           formato: parsed.format,
-          fuente_lectura_ultimo_lote:
-            sourceUrl === OFFICIAL_SOURCE_URL ? "comunidad_madrid" : "satse_espejo",
+          fuente_lectura_ultimo_lote: sourceKind,
           registros_identificables_esperados: EXPECTED_RECORDS,
           ultimo_lote: {
             pagina_inicio: startPage,
