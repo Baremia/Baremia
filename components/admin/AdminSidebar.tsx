@@ -8,6 +8,7 @@ const navigation = [
   { href: "/admin/listados", label: "Listados", icon: "▤" },
   { href: "/admin/estimaciones", label: "Estimaciones", icon: "↗" },
   { href: "/admin/calibracion", label: "Calibración", icon: "≈" },
+  { href: "/admin/pagos", label: "Pagos", icon: "€" },
   { href: "/admin/usuarios", label: "Usuarios", icon: "◉" },
   { href: "/admin/configuracion", label: "Configuración", icon: "⚙" },
 ];
