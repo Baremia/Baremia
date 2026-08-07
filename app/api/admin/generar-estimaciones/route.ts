@@ -30,6 +30,7 @@ export async function GET() {
     { count: candidatosCount, error: candidatosError },
     { count: fuentesCount, error: fuentesError },
     { data: baremoData, error: baremoError },
+    { data: sombraData, error: sombraError },
   ] = await Promise.all([
     supabaseAdmin
       .from("convocatorias")
@@ -67,6 +68,11 @@ export async function GET() {
       .order("fecha_publicacion", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabaseAdmin
+      .schema("baremia")
+      .rpc("resumen_estimaciones_sombra_v11", {
+        p_convocatoria_id: MADRID_ENFERMERIA_ID,
+      }),
   ]);
 
   const error =
@@ -76,7 +82,8 @@ export async function GET() {
     aproximadosError ??
     candidatosError ??
     fuentesError ??
-    baremoError;
+    baremoError ??
+    sombraError;
 
   if (error) {
     return NextResponse.json(
@@ -100,6 +107,7 @@ export async function GET() {
     convocatorias: convocatorias ?? [],
     estimaciones_v1: estimacionesCount ?? 0,
     baremo_oficial: baremoData ?? null,
+    modelo_sombra: sombraData ?? null,
     cobertura: {
       candidatos,
       fuentes_meritos: fuentesCount ?? 0,
@@ -127,9 +135,46 @@ export async function POST(request: NextRequest) {
   }
 
   const convocatoriaId = clean(body.convocatoria_id);
+  const action = clean(body.action) || "publico";
+
   if (!convocatoriaId) {
     return NextResponse.json(
       { ok: false, error: "Selecciona una convocatoria." },
+      { status: 400 }
+    );
+  }
+
+  if (action === "sombra") {
+    const { data, error } = await supabaseAdmin
+      .schema("baremia")
+      .rpc("generar_estimaciones_sombra_v11", {
+        p_convocatoria_id: convocatoriaId,
+        p_plazas_general: 3133,
+        p_plazas_discapacidad: 236,
+      });
+
+    if (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "No se pudo recalcular el modelo sombra.",
+          detalle: error.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    return NextResponse.json({
+      ok: true,
+      resultado: result,
+      mensaje: `${result?.estimaciones_generadas ?? 0} estimaciones sombra v1.1 recalculadas. No se ha modificado ningún resultado público.`,
+    });
+  }
+
+  if (action !== "publico") {
+    return NextResponse.json(
+      { ok: false, error: "Acción no válida." },
       { status: 400 }
     );
   }
@@ -146,7 +191,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: "No se pudieron generar las estimaciones.",
+        error: "No se pudieron generar las estimaciones públicas.",
         detalle: error.message,
       },
       { status: 500 }
@@ -157,6 +202,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     resultado: result,
-    mensaje: `${result?.estimaciones_generadas ?? 0} estimaciones generadas. Coincidencias directas: ${result?.coincidencias_directas ?? 0}. Méritos imputados: ${result?.meritos_imputados ?? 0}.`,
+    mensaje: `${result?.estimaciones_generadas ?? 0} estimaciones públicas generadas. Coincidencias directas: ${result?.coincidencias_directas ?? 0}. Méritos imputados: ${result?.meritos_imputados ?? 0}.`,
   });
 }
