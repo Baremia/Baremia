@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+const MADRID_ENFERMERIA_ID = "15b496e6-f85e-403e-9270-0f3fb4d43bfc";
+
 function unauthorized() {
   return NextResponse.json(
     { ok: false, error: "Sesión de administrador no válida." },
@@ -23,7 +25,8 @@ export async function GET() {
   const [
     { data: convocatorias, error: convocatoriasError },
     { count: estimacionesCount, error: estimacionesError },
-    { count: crucesCount, error: crucesError },
+    { count: exactosCount, error: exactosError },
+    { count: aproximadosCount, error: aproximadosError },
     { count: candidatosCount, error: candidatosError },
     { count: fuentesCount, error: fuentesError },
   ] = await Promise.all([
@@ -37,19 +40,29 @@ export async function GET() {
       .eq("metodologia_version", "madrid-enfermeria-v1"),
     supabaseAdmin
       .from("cruces_fuentes_meritos")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("convocatoria_id", MADRID_ENFERMERIA_ID)
+      .eq("metodo", "nombre_exacto_dni_enmascarado"),
+    supabaseAdmin
+      .from("cruces_fuentes_meritos")
+      .select("id", { count: "exact", head: true })
+      .eq("convocatoria_id", MADRID_ENFERMERIA_ID)
+      .eq("metodo", "nombre_aproximado_dni_enmascarado"),
     supabaseAdmin
       .from("candidatos")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("convocatoria_id", MADRID_ENFERMERIA_ID),
     supabaseAdmin
       .from("fuentes_meritos")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("convocatoria_id", MADRID_ENFERMERIA_ID),
   ]);
 
   const error =
     convocatoriasError ??
     estimacionesError ??
-    crucesError ??
+    exactosError ??
+    aproximadosError ??
     candidatosError ??
     fuentesError;
 
@@ -65,7 +78,9 @@ export async function GET() {
   }
 
   const candidatos = candidatosCount ?? 0;
-  const cruces = crucesCount ?? 0;
+  const exactos = exactosCount ?? 0;
+  const aproximados = aproximadosCount ?? 0;
+  const cruces = exactos + aproximados;
   const cobertura = candidatos > 0 ? Number(((cruces / candidatos) * 100).toFixed(2)) : 0;
 
   return NextResponse.json({
@@ -76,8 +91,11 @@ export async function GET() {
       candidatos,
       fuentes_meritos: fuentesCount ?? 0,
       coincidencias_directas: cruces,
+      coincidencias_exactas: exactos,
+      coincidencias_aproximadas: aproximados,
       sin_coincidencia: Math.max(candidatos - cruces, 0),
       porcentaje: cobertura,
+      cruce_version: 2,
     },
   });
 }
