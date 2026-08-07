@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  ACCESS_GRANT_COOKIE,
+  createAccessSessionGrant,
+} from "../../../lib/access-session-grant";
 import { consumeRequestLimit } from "../../../lib/request-rate-limit";
 import { supabaseAdmin } from "../../../lib/supabase-admin";
 
@@ -70,13 +74,27 @@ export async function POST(request: NextRequest) {
     }
 
     const resultado = Array.isArray(data) ? data[0] : data;
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       autenticado: resultado?.autenticado,
       acceso_id: resultado?.acceso_id,
       mensaje: resultado?.mensaje,
     });
+
+    if (resultado?.autenticado && resultado?.acceso_id) {
+      const grant = createAccessSessionGrant(resultado.acceso_id);
+      response.cookies.set({
+        name: ACCESS_GRANT_COOKIE,
+        value: grant.token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: grant.maxAge,
+      });
+    }
+
+    return response;
   } catch {
     return NextResponse.json(
       {
