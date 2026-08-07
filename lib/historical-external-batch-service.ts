@@ -4,6 +4,9 @@ import { supabaseAdmin } from "./supabase-admin";
 
 const OFFICIAL_SOURCE_URL =
   "https://www.comunidad.madrid/docs/assets/2022/09/29/rrhh-ope-enfermeroa-2022-09-29-listado_concurso_alfabetico.pdf";
+const SATSE_MIRROR_URL =
+  "https://madrid.satse.es/documents/37411/4695298/rrhh_ope_enfermeroa_2022_09_29_listado_concurso_alfabetico_cPBjpF.pdf/89d63249-7b72-d4c7-6f0f-fc86d9f1083b?t=1691090985215";
+const READ_SOURCES = [OFFICIAL_SOURCE_URL, SATSE_MIRROR_URL] as const;
 const EXPECTED_RECORDS = 19_136;
 const BATCH_SIZE = 30;
 const UPSERT_SIZE = 500;
@@ -83,6 +86,28 @@ function processIsFresh(process: HistoricalProcess) {
   return Number.isFinite(time) && time > Date.now() - STALE_MS;
 }
 
+async function extractHistoricalBatch(startPage: number, endPage: number) {
+  const errors: string[] = [];
+
+  for (const sourceUrl of READ_SOURCES) {
+    try {
+      const extracted = await extractPdfPageBatch(sourceUrl, startPage, endPage);
+      return { extracted, sourceUrl };
+    } catch (error) {
+      errors.push(
+        `${sourceUrl === OFFICIAL_SOURCE_URL ? "fuente oficial" : "espejo SATSE"}: ${
+          error instanceof Error ? error.message : "error desconocido"
+        }`
+      );
+    }
+  }
+
+  throw new HistoricalExternalError(
+    `No se pudo leer parcialmente el PDF histórico desde ninguna fuente permitida. ${errors.join(" | ")}`,
+    502
+  );
+}
+
 async function loadListado(listadoId: string): Promise<HistoricalListado> {
   const { data, error } = await supabaseAdmin
     .from("listados")
@@ -119,7 +144,7 @@ async function loadProcess(listadoId: string): Promise<HistoricalProcess | null>
     .maybeSingle();
 
   if (error) throw new HistoricalExternalError(error.message);
-  return data as HistoricalProcess | null;
+  return data as unknown as HistoricalProcess | null;
 }
 
 async function claimProcess(listado: HistoricalListado) {
@@ -166,7 +191,7 @@ async function claimProcess(listado: HistoricalListado) {
         `No se pudo bloquear el histórico: ${error?.message ?? "respuesta vacía"}`
       );
     }
-    return { process: data as HistoricalProcess, alreadyCompleted: false };
+    return { process: data as unknown as HistoricalProcess, alreadyCompleted: false };
   }
 
   const { data, error } = await supabaseAdmin
@@ -187,6 +212,7 @@ async function claimProcess(listado: HistoricalListado) {
         fase: "preparacion_lote_historico",
         documento: listado.titulo,
         fuente_oficial: OFFICIAL_SOURCE_URL,
+        espejo_lectura: SATSE_MIRROR_URL,
         registros_identificables_esperados: EXPECTED_RECORDS,
       },
     })
@@ -201,7 +227,7 @@ async function claimProcess(listado: HistoricalListado) {
     );
   }
 
-  return { process: data as HistoricalProcess, alreadyCompleted: false };
+  return { process: data as unknown as HistoricalProcess, alreadyCompleted: false };
 }
 
 async function saveRecords(
@@ -311,11 +337,7 @@ export async function processNextHistoricalExternalBatch(
       .update({ estado_procesamiento: "procesando", error_procesamiento: null })
       .eq("id", listado.id);
 
-    const extracted = await extractPdfPageBatch(
-      OFFICIAL_SOURCE_URL,
-      startPage,
-      requestedEnd
-    );
+    const { extracted, sourceUrl } = await extractHistoricalBatch(startPage, requestedEnd);
     detectedTotalPages = extracted.totalPages;
     lastPage = extracted.pages.at(-1)?.pageNumber ?? startPage;
 
@@ -372,6 +394,8 @@ export async function processNextHistoricalExternalBatch(
           ...object(process.detalles),
           fase: completed ? "completado" : "lote_completado",
           formato: parsed.format,
+          fuente_lectura_ultimo_lote:
+            sourceUrl === OFFICIAL_SOURCE_URL ? "comunidad_madrid" : "satse_espejo",
           registros_identificables_esperados: EXPECTED_RECORDS,
           ultimo_lote: {
             pagina_inicio: startPage,
