@@ -4,6 +4,7 @@ import {
   encryptAccessCode,
   generateAccessCode,
 } from "../../../../../lib/access-delivery-crypto";
+import { deliverAccessByPaymentId } from "../../../../../lib/access-delivery-service";
 import {
   stripeWebhookConfigured,
   verifyStripeWebhook,
@@ -177,6 +178,11 @@ export async function POST(request: NextRequest) {
     if (error) throw new Error(error.message);
 
     const result = Array.isArray(data) ? data[0] : data;
+    const pagoId = result?.pago_id as string | undefined;
+    if (!pagoId) throw new Error("No se pudo identificar el pago confirmado.");
+
+    const delivery = await deliverAccessByPaymentId(pagoId);
+
     await supabaseAdmin
       .from("eventos_pago")
       .update({
@@ -190,10 +196,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      pago_id: result?.pago_id ?? null,
+      pago_id: pagoId,
       acceso_id: result?.acceso_id ?? null,
       ya_procesado: result?.ya_procesado ?? false,
-      entrega: result?.ya_procesado ? "ya_existente" : "pendiente_email",
+      entrega: delivery.alreadySent ? "ya_enviada" : "enviada",
+      email_id: delivery.emailId,
     });
   } catch (error) {
     console.error("Error procesando webhook de Stripe:", error);
