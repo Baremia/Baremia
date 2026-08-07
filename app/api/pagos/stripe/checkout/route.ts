@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeRequestLimit } from "../../../../../lib/request-rate-limit";
 import { supabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
   createStripeCheckoutSession,
@@ -24,6 +25,22 @@ function configuredPriceCents() {
 
 export async function POST(request: NextRequest) {
   try {
+    const limit = await consumeRequestLimit(request, {
+      namespace: "stripe-checkout",
+      limit: 10,
+      windowSeconds: 10 * 60,
+      blockSeconds: 30 * 60,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Se han iniciado demasiados intentos de pago. Inténtalo más tarde." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.max(1, limit.retryAfter)) },
+        }
+      );
+    }
+
     if (!stripeCheckoutConfigured()) {
       return NextResponse.json(
         { ok: false, error: "Stripe todavía no está configurado." },
