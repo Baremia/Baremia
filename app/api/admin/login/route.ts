@@ -4,6 +4,7 @@ import {
   createAdminSessionToken,
   isValidAdminPassword,
 } from "../../../../lib/admin-auth";
+import { consumeRequestLimit } from "../../../../lib/request-rate-limit";
 
 type LoginBody = {
   password?: string;
@@ -11,6 +12,25 @@ type LoginBody = {
 
 export async function POST(request: NextRequest) {
   try {
+    const limit = await consumeRequestLimit(request, {
+      namespace: "admin-login",
+      limit: 8,
+      windowSeconds: 15 * 60,
+      blockSeconds: 30 * 60,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Demasiados intentos de acceso. Inténtalo de nuevo más tarde.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.max(1, limit.retryAfter)) },
+        }
+      );
+    }
+
     let body: LoginBody;
 
     try {
