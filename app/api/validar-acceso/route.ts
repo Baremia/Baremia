@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeRequestLimit } from "../../../lib/request-rate-limit";
 import { supabaseAdmin } from "../../../lib/supabase-admin";
 
 type Body = {
@@ -8,7 +9,31 @@ type Body = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: Body = await request.json();
+    const limit = await consumeRequestLimit(request, {
+      namespace: "validar-acceso",
+      limit: 30,
+      windowSeconds: 10 * 60,
+      blockSeconds: 30 * 60,
+    });
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { ok: false, error: "Demasiados intentos de acceso. Inténtalo más tarde." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.max(1, limit.retryAfter)) },
+        }
+      );
+    }
+
+    let body: Body;
+    try {
+      body = (await request.json()) as Body;
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "La solicitud no contiene un JSON válido." },
+        { status: 400 }
+      );
+    }
 
     if (!body.candidato_id || !body.codigo) {
       return NextResponse.json(
@@ -16,6 +41,13 @@ export async function POST(request: NextRequest) {
           ok: false,
           error: "Faltan datos",
         },
+        { status: 400 }
+      );
+    }
+
+    if (body.codigo.length > 64) {
+      return NextResponse.json(
+        { ok: false, error: "Código no válido." },
         { status: 400 }
       );
     }
@@ -31,7 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error: error.message,
+          error: "No se pudo validar el acceso.",
         },
         { status: 500 }
       );
