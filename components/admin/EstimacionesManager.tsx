@@ -12,8 +12,11 @@ type Cobertura = {
   candidatos: number;
   fuentes_meritos: number;
   coincidencias_directas: number;
+  coincidencias_exactas: number;
+  coincidencias_aproximadas: number;
   sin_coincidencia: number;
   porcentaje: number;
+  cruce_version: number;
 };
 
 type StatusPayload = {
@@ -85,7 +88,7 @@ export default function EstimacionesManager() {
     if (!convocatoriaId) return;
     if (
       !window.confirm(
-        "¿Generar o recalcular las 8.321 estimaciones? Se conservarán solo las coincidencias nominales únicas y el resto se imputará estadísticamente."
+        "¿Recalcular las 8.321 estimaciones con el cruce v2? Los cruces exactos y aproximados deben estar confirmados por el identificador publicado; el resto se imputará estadísticamente."
       )
     ) {
       return;
@@ -132,7 +135,7 @@ export default function EstimacionesManager() {
     <div className="admin-page">
       <header className="admin-page-header">
         <div>
-          <p className="admin-eyebrow">MOTOR V1</p>
+          <p className="admin-eyebrow">MOTOR V1 · CRUCE V2</p>
           <h1>Estimaciones</h1>
           <p>Calcula posiciones para Enfermería Madrid usando oposición oficial y méritos de referencia.</p>
         </div>
@@ -146,26 +149,26 @@ export default function EstimacionesManager() {
           <small>aprobados importados</small>
         </article>
         <article className="admin-stat-card">
-          <span>Fuente de méritos</span>
-          <strong>{coverage?.fuentes_meritos ?? 0}</strong>
-          <small>registros de bolsa</small>
+          <span>Cruce exacto</span>
+          <strong>{coverage?.coincidencias_exactas ?? 0}</strong>
+          <small>nombre + identificador compatible</small>
         </article>
         <article className="admin-stat-card">
-          <span>Cruces directos</span>
-          <strong>{coverage?.coincidencias_directas ?? 0}</strong>
-          <small>{coverage?.porcentaje ?? 0}% de cobertura</small>
+          <span>Cruce aproximado</span>
+          <strong>{coverage?.coincidencias_aproximadas ?? 0}</strong>
+          <small>alta similitud + identificador compatible</small>
         </article>
         <article className="admin-stat-card">
-          <span>Sin cruce directo</span>
+          <span>Imputación estadística</span>
           <strong>{coverage?.sin_coincidencia ?? 0}</strong>
-          <small>se estimarán por banda</small>
+          <small>sin cruce suficientemente seguro</small>
         </article>
       </section>
 
       <section className="admin-panel-card admin-form-card" style={{ maxWidth: 760 }}>
         <div className="admin-panel-heading">
           <p className="admin-eyebrow">CÁLCULO</p>
-          <h2>Generar estimaciones v1</h2>
+          <h2>Generar estimaciones</h2>
         </div>
 
         <div className="admin-data-form">
@@ -186,12 +189,17 @@ export default function EstimacionesManager() {
           </label>
 
           <div className="admin-info-box">
-            <strong>Modelo Madrid Enfermería v1</strong>
+            <strong>Modelo Madrid Enfermería v1 · cruce de identidades v2</strong>
             <p>
-              Las coincidencias directas solo se aceptan cuando el nombre normalizado es único tanto
-              entre los aprobados como en la bolsa. Los casos ambiguos o ausentes no se fuerzan: se
-              estiman con la mediana de méritos de candidatos con una nota de oposición similar y un
-              intervalo de incertidumbre más amplio.
+              El motor acepta primero coincidencias exactas de nombre confirmadas por el fragmento
+              compatible del identificador publicado. Después admite un grupo pequeño de variantes de
+              nombre con similitud alta, siempre confirmadas por el mismo identificador y con margen
+              suficiente frente a la segunda mejor coincidencia. Los casos restantes no se fuerzan y se
+              estiman por banda de nota de oposición.
+            </p>
+            <p style={{ marginBottom: 0 }}>
+              Cobertura directa actual: <strong>{coverage?.porcentaje ?? 0}%</strong> · fuente de méritos:{" "}
+              <strong>{coverage?.fuentes_meritos ?? 0}</strong> registros.
             </p>
           </div>
 
@@ -204,7 +212,7 @@ export default function EstimacionesManager() {
             onClick={generate}
             disabled={!convocatoriaId || loading || generating || !coverage?.coincidencias_directas}
           >
-            {generating ? "Calculando…" : "Generar o recalcular estimaciones"}
+            {generating ? "Calculando…" : "Recalcular estimaciones"}
           </button>
         </div>
       </section>
