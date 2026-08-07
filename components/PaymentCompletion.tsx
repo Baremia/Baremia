@@ -9,7 +9,6 @@ type MailStatus = "pendiente" | "enviado" | "incidencia";
 export default function PaymentCompletion({ sessionId }: { sessionId: string }) {
   const [status, setStatus] = useState<Status>("procesando");
   const [mail, setMail] = useState<MailStatus>("pendiente");
-  const [attempts, setAttempts] = useState(0);
 
   useEffect(() => {
     if (!sessionId) {
@@ -19,8 +18,10 @@ export default function PaymentCompletion({ sessionId }: { sessionId: string }) 
 
     let cancelled = false;
     let timer: number | undefined;
+    let attempts = 0;
 
     async function check() {
+      attempts += 1;
       try {
         const response = await fetch(
           `/api/pagos/stripe/estado?session_id=${encodeURIComponent(sessionId)}`,
@@ -34,15 +35,16 @@ export default function PaymentCompletion({ sessionId }: { sessionId: string }) 
           return;
         }
 
-        const nextStatus = data.estado === "confirmado" ? "confirmado" : "procesando";
+        const nextStatus: Status =
+          data.estado === "confirmado" ? "confirmado" : "procesando";
         const nextMail: MailStatus = ["enviado", "incidencia"].includes(data.correo)
           ? data.correo
           : "pendiente";
+
         setStatus(nextStatus);
         setMail(nextMail);
-        setAttempts((value) => value + 1);
 
-        if (nextMail !== "enviado" && attempts < 14) {
+        if (nextMail !== "enviado" && nextMail !== "incidencia" && attempts < 15) {
           timer = window.setTimeout(check, 2000);
         }
       } catch {
@@ -55,7 +57,7 @@ export default function PaymentCompletion({ sessionId }: { sessionId: string }) 
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [sessionId, attempts]);
+  }, [sessionId]);
 
   const delivered = status === "confirmado" && mail === "enviado";
   const incident = mail === "incidencia" || status === "error";
